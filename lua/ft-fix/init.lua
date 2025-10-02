@@ -21,7 +21,7 @@ end
 
 function M.setup(opts)
 	M.opts = vim.tbl_deep_extend("force", {
-		-- decorate_on_read = true,
+		annotate = true,
 	}, opts or {})
 
 	vim.api.nvim_set_hl(0, "fixTag", { link = "Tag" })
@@ -34,10 +34,9 @@ function M.setup(opts)
 	vim.api.nvim_create_autocmd({ "BufReadPost", "TextChanged", "TextChangedI" }, {
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
 		callback = function(ev)
-			if vim.bo[ev.buf].filetype ~= "fix" then
-				return
+			if vim.bo[ev.buf].filetype == "fix" then
+				require("ft-fix.main").annotate(M.opts, ev.buf, ns)
 			end
-			require("ft-fix.main").annotate(ev.buf, ns)
 		end,
 	})
 end

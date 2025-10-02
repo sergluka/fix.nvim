@@ -32,64 +32,82 @@ local TAGS = {
 local function parse_line(line)
 	-- split on SOH (0x01)
 	local fields = {}
-	local i = 1
+	local start = line:find("8=FIX")
+	if start == nil then
+		return fields
+	end
+	line = string.sub(line, 0)
+
 	for pair in line:gmatch("(%d+=[^|]+)") do
 		local eq = pair:find("=")
 		if eq then
 			local tag = pair:sub(1, eq - 1)
 			local value = pair:sub(eq + 1)
-			local tag_start = i - 1
+			local tag_start = start - 1
 			local tag_end = tag_start + #tag
 			local value_start = tag_end + 1
 			local value_end = value_start + #value
 			table.insert(fields, {
-				tag_start = i - 1,
+				tag_start = start - 1,
 				tag_end = tag_end,
 				tag = tonumber(tag),
 				value_start = value_start,
 				value_end = value_end,
 				value = value,
 			})
-			i = value_end + 1 + 1
+			start = value_end + 1 + 1
 		end
 	end
 	return fields
 end
 
-function M.annotate(buf, ns)
+local function highlight(buf, ns, lineno, field)
+	vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_start, {
+		end_row = lineno - 1,
+		end_col = field.tag_end,
+		hl_group = "fixTag",
+	})
+
+	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
+	-- 	end_row = lineno - 1,
+	-- 	end_col = field.value_start,
+	-- 	hl_group = "fixAssign",
+	-- })
+	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_start, {
+	-- 	end_row = lineno - 1,
+	-- 	end_col = field.value_end,
+	-- 	hl_group = "fixValue",
+	-- })
+	--
+	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_end, {
+	-- end_row = lineno - 1,
+	-- end_col = field.value_end + 1,
+	-- hl_group = "fixSeparator",
+	-- })
+end
+
+local function virtual_text(buf, ns, lineno, field)
+	vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
+		virt_text = { { "(" .. TAGS[field.tag].name .. ")", "Comment" } },
+		virt_text_pos = "inline",
+	})
+end
+
+function M.annotate(opts, buf, ns)
 	if not vim.api.nvim_buf_is_loaded(buf) then
 		return
 	end
+
 	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
 	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
 	for lineno, line in ipairs(lines) do
 		local fields = parse_line(line)
 		for _, field in ipairs(fields) do
 			if field.tag and TAGS[field.tag] then
-				vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_start, {
-					end_row = lineno - 1,
-					end_col = field.tag_end,
-					hl_group = "fixTag",
-				})
-				vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
-					end_row = lineno - 1,
-					end_col = field.value_start,
-					hl_group = "fixAssign",
-				})
-				vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_start, {
-					end_row = lineno - 1,
-					end_col = field.value_end,
-					hl_group = "fixValue",
-				})
-				vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_end, {
-					end_row = lineno - 1,
-					end_col = field.value_end + 1,
-					hl_group = "fixSeparator",
-				})
-				vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
-					virt_text = { { "(" .. TAGS[field.tag].name .. ")", "Comment" } },
-					virt_text_pos = "inline",
-				})
+				highlight(buf, ns, lineno, field)
+				if opts.annotate then
+					virtual_text(buf, ns, lineno, field)
+				end
 			end
 		end
 	end
