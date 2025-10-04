@@ -1,44 +1,26 @@
 local M = {}
 
 function M.init()
-	vim.filetype.add({
-		filename = {
-			[".fix"] = "fix",
-			[".fixlog"] = "fix",
-			[".fix.txt"] = "fix",
+	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+	---@diagnostic disable-next-line: inject-field
+	parser_config.fix = {
+		install_info = {
+			url = "https://github.com/sergluka/tree-sitter-fix",
+			files = { "src/parser.c" },
 		},
-		pattern = {
-			[".*"] = function(path, bufnr)
-				local line = vim.api.nvim_buf_get_lines(bufnr, 0, 0, false)[1] or ""
-				if line:match("^8-FIX") then
-					return "fix"
-				end
-				return nil
-			end,
-		},
-	})
+		filetype = "fix",
+	}
+
+	-- (Optional) explicit ft->lang hook; harmless if your ft is already 'fix'
+	vim.treesitter.language.register("fix", "fix")
 end
 
 function M.setup(opts)
-	M.opts = vim.tbl_deep_extend("force", {
-		annotate = true,
-	}, opts or {})
-
-	vim.api.nvim_set_hl(0, "fixTag", { link = "Tag" })
-	vim.api.nvim_set_hl(0, "fixValue", { link = "Normal" })
-	vim.api.nvim_set_hl(0, "fixAssign", { link = "Operator" })
-	vim.api.nvim_set_hl(0, "fixSeparator", { link = "MsgSeparator" })
-
-	local ns = vim.api.nvim_create_namespace("ft-fix")
-
-	vim.api.nvim_create_autocmd({ "BufReadPost", "TextChanged", "TextChangedI" }, {
-		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
-		callback = function(ev)
-			if vim.bo[ev.buf].filetype == "fix" then
-				require("ft-fix.main").annotate(M.opts, ev.buf, ns)
-			end
-		end,
-	})
+	-- M.opts = vim.tbl_deep_extend("force", {
+	-- 	annotate = true,
+	-- }, opts or {})
 end
+
+M.init()
 
 return M
