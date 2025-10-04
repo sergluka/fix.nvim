@@ -1,0 +1,10 @@
+{
+  "diagnostics.globals": [
+    "describe",
+    "it"
+  ],
+  "hint": {
+    "enable": true,
+    "setType": true
+  }
+}
