@@ -1,14 +1,14 @@
-(tag) @tag
+(tag) @property
 (equals) @operator
 (value) @normal
 (delimiter) @punctuation.delimiter
-; (field) @none
+(field) @none
 
 ; BeginString
 (field
   (tag) @_tag
-  (value) @constant
-  (#eq? @_tag "8"))
+  (value) @constant 
+  (#eq? @_tag "8"))  
 
 ; BodyLength
 (field
@@ -27,3 +27,9 @@
   (tag) @_tag
   (value) @number
   (#eq? @_tag "10"))
+
+(field
+  (tag) @_tag
+  (value) @constant
+  (#eq? @_tag "8"))
+

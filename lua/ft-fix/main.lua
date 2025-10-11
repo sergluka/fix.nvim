@@ -29,88 +29,84 @@ local TAGS = {
 	[60] = { name = "TransactTime", desc = "Transaction time" },
 }
 
-local function parse_line(line)
-	-- split on SOH (0x01)
-	local fields = {}
-	local start = line:find("8=FIX")
-	if start == nil then
-		return fields
-	end
-	line = string.sub(line, 0)
+---@class FixMessage
+---@field lineno number
+---@field tag_start number
+---@field tag_end number
+---@field tag number
+---@field value_start number
+---@field value_end number
+---@field value string
 
-	for pair in line:gmatch("(%d+=[^|]+)") do
-		local eq = pair:find("=")
-		if eq then
-			local tag = pair:sub(1, eq - 1)
-			local value = pair:sub(eq + 1)
-			local tag_start = start - 1
-			local tag_end = tag_start + #tag
-			local value_start = tag_end + 1
-			local value_end = value_start + #value
-			table.insert(fields, {
-				tag_start = start - 1,
-				tag_end = tag_end,
-				tag = tonumber(tag),
-				value_start = value_start,
-				value_end = value_end,
-				value = value,
-			})
-			start = value_end + 1 + 1
-		end
-	end
-	return fields
-end
-
-local function highlight(buf, ns, lineno, field)
-	vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_start, {
-		end_row = lineno - 1,
-		end_col = field.tag_end,
-		hl_group = "fixTag",
-	})
-
-	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
-	-- 	end_row = lineno - 1,
-	-- 	end_col = field.value_start,
-	-- 	hl_group = "fixAssign",
-	-- })
-	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_start, {
-	-- 	end_row = lineno - 1,
-	-- 	end_col = field.value_end,
-	-- 	hl_group = "fixValue",
-	-- })
-	--
-	-- vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.value_end, {
-	-- end_row = lineno - 1,
-	-- end_col = field.value_end + 1,
-	-- hl_group = "fixSeparator",
-	-- })
-end
-
-local function virtual_text(buf, ns, lineno, field)
-	vim.api.nvim_buf_set_extmark(buf, ns, lineno - 1, field.tag_end, {
-		virt_text = { { "(" .. TAGS[field.tag].name .. ")", "Comment" } },
-		virt_text_pos = "inline",
-	})
-end
-
-function M.annotate(opts, buf, ns)
-	if not vim.api.nvim_buf_is_loaded(buf) then
-		return
+---@param buf number
+---@param on_message fun(FixMessage)
+local function iter_fields(buf, on_message)
+	local parser = vim.treesitter.get_parser(buf, "fix")
+	if not parser then
+		error("No FIX parser for buffer " .. buf)
 	end
 
-	vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
-	local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-	for lineno, line in ipairs(lines) do
-		local fields = parse_line(line)
-		for _, field in ipairs(fields) do
-			if field.tag and TAGS[field.tag] then
-				highlight(buf, ns, lineno, field)
-				if opts.annotate then
-					virtual_text(buf, ns, lineno, field)
+	local tree = parser:parse()[1]
+	local root = tree:root()
+
+	for message_node in root:iter_children() do
+		if message_node:type() == "message" then
+			local row, col, byte = message_node:start()
+			local lineno, _, _ = message_node:start()
+			for field_node in message_node:iter_children() do
+				if field_node:type() == "field" then
+					local tag_start, tag_end, tag, value_start, value_end, value
+
+					for child in field_node:iter_children() do
+						local child_type = child:type()
+						local text = vim.treesitter.get_node_text(child, buf)
+
+						if child_type == "tag" then
+							tag = tonumber(text)
+							_, tag_start = child:start()
+							_, tag_end = child:end_()
+						elseif child_type == "value" then
+							value = text
+							_, value_start = child:start()
+							_, value_end = child:end_()
+						end
+					end
+					local message = {
+						lineno = lineno,
+						tag_start = tag_start,
+						tag_end = tag_end,
+						tag = tag,
+						value_start = value_start,
+						value_end = value_end,
+						value = value,
+					}
+					on_message(message)
 				end
 			end
 		end
 	end
+end
+
+local function annotate_field(buf, ns, field)
+	-- print("field.tag", field.tag)
+	if TAGS[field.tag] then
+		vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
+			virt_text = { { "(" .. TAGS[field.tag].name .. ")", "Comment" } },
+			virt_text_pos = "inline",
+		})
+	end
+end
+
+function M.annotate(opts, bufnr, ns)
+	if not vim.api.nvim_buf_is_loaded(bufnr) then
+		return
+	end
+
+	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+
+	iter_fields(bufnr, function(field)
+		annotate_field(bufnr, ns, field)
+	end)
 end
 
 return M
