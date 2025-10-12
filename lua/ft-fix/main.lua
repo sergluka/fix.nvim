@@ -5,30 +5,6 @@
 
 local M = {}
 
--- Minimal FIX 4.2–5.0 common tags; extend as needed
-local TAGS = {
-	[8] = { name = "BeginString", desc = "FIX version identifier" },
-	[9] = { name = "BodyLength", desc = "Length of message body" },
-	[35] = { name = "MsgType", desc = "Message type (e.g., D=NewOrderSingle)" },
-	[34] = { name = "MsgSeqNum", desc = "Sequence number" },
-	[49] = { name = "SenderCompID", desc = "Sender ID" },
-	[56] = { name = "TargetCompID", desc = "Target ID" },
-	[52] = { name = "SendingTime", desc = "UTC timestamp" },
-	[10] = { name = "CheckSum", desc = "Three-digit checksum" },
-	[11] = { name = "ClOrdID", desc = "Client order ID" },
-	[37] = { name = "OrderID", desc = "Exchange order ID" },
-	[17] = { name = "ExecID", desc = "Execution ID" },
-	[150] = { name = "ExecType", desc = "Execution type" },
-	[39] = { name = "OrdStatus", desc = "Order status" },
-	[55] = { name = "Symbol", desc = "Instrument" },
-	[54] = { name = "Side", desc = "1=Buy, 2=Sell" },
-	[38] = { name = "OrderQty", desc = "Quantity" },
-	[40] = { name = "OrdType", desc = "Order type" },
-	[44] = { name = "Price", desc = "Price" },
-	[59] = { name = "TimeInForce", desc = "Time in force" },
-	[60] = { name = "TransactTime", desc = "Transaction time" },
-}
-
 ---@class FixMessage
 ---@field lineno number
 ---@field tag_start number
@@ -40,7 +16,7 @@ local TAGS = {
 
 ---@param buf number
 ---@param on_message fun(FixMessage)
-local function iter_fields(buf, on_message)
+local function iter_messages(buf, on_message)
 	local parser = vim.treesitter.get_parser(buf, "fix")
 	if not parser then
 		error("No FIX parser for buffer " .. buf)
@@ -51,8 +27,8 @@ local function iter_fields(buf, on_message)
 
 	for message_node in root:iter_children() do
 		if message_node:type() == "message" then
-			local row, col, byte = message_node:start()
 			local lineno, _, _ = message_node:start()
+			local fields = {}
 			for field_node in message_node:iter_children() do
 				if field_node:type() == "field" then
 					local tag_start, tag_end, tag, value_start, value_end, value
@@ -71,7 +47,7 @@ local function iter_fields(buf, on_message)
 							_, value_end = child:end_()
 						end
 					end
-					local message = {
+					local field = {
 						lineno = lineno,
 						tag_start = tag_start,
 						tag_end = tag_end,
@@ -80,21 +56,51 @@ local function iter_fields(buf, on_message)
 						value_end = value_end,
 						value = value,
 					}
-					on_message(message)
+					fields[tag] = field
 				end
+			end
+			on_message(fields)
+		end
+	end
+end
+
+local function annotate_field(buf, ns, dict, field)
+	local tag = dict.fields[field.tag]
+	if tag then
+		vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
+			-- TODO: add to config
+			virt_text = { { "(" .. tag.name .. ")", "Comment" } },
+			virt_text_pos = "inline",
+		})
+
+		if tag.tag == 35 then -- MsgType
+			local msg = dict.messages[field.value]
+			if msg then
+				-- TODO: add to config
+				vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
+					virt_text = { { "(" .. msg.name .. ")", "Type" } },
+					virt_text_pos = "inline",
+				})
 			end
 		end
 	end
 end
 
-local function annotate_field(buf, ns, field)
-	-- print("field.tag", field.tag)
-	if TAGS[field.tag] then
-		vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
-			virt_text = { { "(" .. TAGS[field.tag].name .. ")", "Comment" } },
-			virt_text_pos = "inline",
-		})
-	end
+-- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
+local function annotate_message(buf, ns, dict, fields)
+	local text = string.format(
+		"%d: %s=>%s | %s |",
+		fields[34].value,
+		fields[49].value,
+		fields[56].value,
+		dict.messages[fields[35].value].name
+	)
+	vim.api.nvim_buf_set_extmark(buf, ns, fields[1].lineno, 0, {
+		virt_lines = {
+			{ { text, "Title" } },
+		},
+		virt_lines_above = true,
+	})
 end
 
 function M.annotate(opts, bufnr, ns)
@@ -104,8 +110,19 @@ function M.annotate(opts, bufnr, ns)
 
 	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
-	iter_fields(bufnr, function(field)
-		annotate_field(bufnr, ns, field)
+	local dict = nil
+	iter_messages(bufnr, function(fields)
+		local field = fields[8]
+		if field then
+			local version = field.value
+			dict = require("ft-fix.dictionary").load(version)
+		end
+		if dict then
+			annotate_message(bufnr, ns, dict, fields)
+			for _, field in pairs(fields) do
+				annotate_field(bufnr, ns, dict, field)
+			end
+		end
 	end)
 end
 
