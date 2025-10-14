@@ -1,18 +1,21 @@
 local xml2lua = require("xml2lua")
 
----@class Dictionary
----@field _cache table<string, { fields: { [number]: Field }, messages: { [FixMessageType]: Message } }>
+---@class FixDictionary
+---@field _cache table<string, Dictionary>
 M = {}
 
----@alias FixMessageType integer
+---@alias FixMessageType integer -- XXX: check
 
----@class Message
+---@alias Dictionary { fields: { [number]: FieldDef }, messages: { [FixMessageType]: MessageDef } }
+---@alias FieldsDef  { [number]: FieldDef }
+
+---@class MessageDef
 ---@field type FixMessageType
 ---@field name string
 ---@field category string
 ---@field description string
 
----@class Field
+---@class FieldDef
 ---@field tag number
 ---@field name string
 ---@field type string
@@ -42,7 +45,8 @@ function M.load(version)
 	M._cache = M._cache or {}
 	if not M._cache[version] then
 		print("Loading FIX dictionary for version " .. version)
-		local base_path = "docs/xml/" .. version .. "/Base/"
+		local module_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
+		local base_path = module_dir .. "../../docs/xml/" .. version .. "/Base/"
 		local fields = M.load_fields(base_path, "Fields.xml")
 		local messages = M.load_messages(base_path, "Messages.xml")
 		M._cache[version] = { fields = fields, messages = messages }
@@ -52,13 +56,14 @@ end
 
 ---@param dir string
 ---@param file string
----@return { [number]: Field }
+---@return FieldsDef
 function M.load_fields(dir, file)
 	local xml = parse(dir, file)
 
 	local dict = {}
 	for _, value in ipairs(xml.Fields.Field) do
 		local tag = tonumber(value.Tag)
+		assert(tag ~= nil, "Invalid tag: " .. value.Tag)
 		dict[tag] = {
 			tag = tag,
 			name = value.Name,
@@ -71,7 +76,7 @@ end
 
 ---@param dir string
 ---@param file string
----@return { [FixMessageType]: Message }
+---@return { [FixMessageType]: MessageDef }
 function M.load_messages(dir, file)
 	local xml = parse(dir, file)
 

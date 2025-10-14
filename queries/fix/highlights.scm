@@ -1,3 +1,4 @@
+(comment) @comment
 (tag) @property
 (equals) @operator
 (value) @normal
@@ -15,12 +16,6 @@
   (tag) @_tag
   (value) @number
   (#eq? @_tag "9"))
-
-; MsgType
-(field
-  (tag) @_tag
-  (value) @type
-  (#eq? @_tag "35"))
 
 ; CheckSum
 (field
