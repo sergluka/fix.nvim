@@ -80,20 +80,20 @@ end
 local function annotate_field(opts, buf, ns, dict, field)
 	local tag = dict.fields[field.data.tag]
 	if tag then
-		vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
-			virt_text = { opts.annotate.field.tag.formatter(tag, field.data.value) },
-			virt_text_pos = "inline",
-		})
+		local tag_text = opts.annotate.field.tag.formatter(tag, field.data.value)
+		if tag_text then
+			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
+				virt_text = { tag_text },
+				virt_text_pos = "inline",
+			})
+		end
 
-		-- TODO: Make value mapping not only for MsgType
-		if tag.tag == 35 then -- MsgType
-			local msg = dict.messages[field.data.value]
-			if msg then
-				vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
-					virt_text = { opts.annotate.field.value.formatter(msg) },
-					virt_text_pos = "inline",
-				})
-			end
+		local value_text = opts.annotate.field.value.formatter(dict, tag, field.data.value)
+		if value_text then
+			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
+				virt_text = { value_text },
+				virt_text_pos = "inline",
+			})
 		end
 	end
 end

@@ -13,11 +13,11 @@
 ---@field annotate.field table
 ---@field annotate.field.enabled boolean
 ---@field annotate.field.tag.formatter fun(tag: FieldDef, value: string): {text: string, highlight: string}
----@field annotate.field.value.formatter fun(msg: MessageDef): {text: string, highlight: string} -- FIXME
+---@field annotate.field.value.formatter fun(dict: Dictionary, tag: FieldDef, value: string): {text: string, highlight: string} -- FIXME
 ---@field annotate.message table
 ---@field annotate.message.enabled boolean
 ---@field annotate.message.position string "above" | "below"
----@field annotate.message.formatter fun(tag: FieldDef, value: string): {text: string, highlight: string}
+---@field annotate.message.formatter fun(tag: FieldDef, value: string): {line: {text: string, highlight: string}}
 
 local M = {}
 
@@ -43,38 +43,16 @@ function M.setup(opts)
 			field = {
 				enabled = true,
 				tag = {
-					formatter = function(tag, value)
-						return { "(" .. tag.name .. ")", "Comment" }
-					end,
+					formatter = require("ft-fix.formatters.tag").common,
 				},
 				value = {
-					formatter = function(msg)
-						return { "(" .. msg.name .. ")", "Type" }
-					end,
+					formatter = require("ft-fix.formatters.value").common,
 				},
 			},
 			message = {
 				enabled = true,
 				position = "above",
-				formatter = function(dict, fields)
-					local text = string.format(
-						"%s: %d: %s=>%s | %s |",
-						fields[52].data.value,
-						fields[34].data.value,
-						fields[49].data.value,
-						fields[56].data.value,
-						dict.messages[fields[35].data.value].name
-					)
-					local win_width = vim.api.nvim_win_get_width(0)
-
-					-- TODO: docs: sample:
-					-- { { string.rep("-", win_width), "MsgSeparator" } },
-
-					return {
-						{ { text, "Title" } },
-					}
-				end,
-				-- highlight = "Title",
+				formatter = require("ft-fix.formatters.message").single_line,
 			},
 		},
 	}, opts or {})

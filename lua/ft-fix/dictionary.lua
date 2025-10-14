@@ -1,8 +1,7 @@
 local xml2lua = require("xml2lua")
 
----@class FixDictionary
+---@class M
 ---@field _cache table<string, Dictionary>
-M = {}
 
 ---@alias FixMessageType integer -- XXX: check
 
@@ -40,6 +39,8 @@ local function parse(dir, file)
 
 	return handler.root
 end
+
+local M = {}
 
 function M.load(version)
 	M._cache = M._cache or {}
