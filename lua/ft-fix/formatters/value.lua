@@ -7,7 +7,7 @@ function M.common(dict, tag, value)
 	if tag.name == "MsgType" then
 		local msg = dict.messages[value]
 		if msg then
-			return { "(" .. msg.name .. ")", "Special" }
+			return { "(" .. msg.name .. ")", "Title" }
 		end
 	end
 end

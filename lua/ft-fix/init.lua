@@ -21,7 +21,7 @@
 
 local M = {}
 
-function M.init()
+local function init()
 	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
 	---@diagnostic disable-next-line: inject-field
 	parser_config.fix = {
@@ -73,6 +73,6 @@ function M.setup(opts)
 	})
 end
 
-M.init()
+init()
 
 return M
