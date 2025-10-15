@@ -3,17 +3,25 @@ M = {}
 --- @param dict Dictionary
 --- @param fields Fields
 function M.single_line(dict, fields)
+	local msg_type = fields[35].data.value
+	local msg_type_name = dict.messages[msg_type].name
+
 	local text = string.format(
-		"%s: %d: %s=>%s | %s |",
+		"%s: %d: %s=>%s | %s | ",
 		fields[52].data.value,
 		fields[34].data.value,
 		fields[49].data.value,
 		fields[56].data.value,
-		dict.messages[fields[35].data.value].name
+		msg_type_name
 	)
 
+	local details = ""
+	if msg_type_name == "ExecutionReport" then
+		details = "ExecType=" .. fields[150].data.value
+	end
+
 	return {
-		{ { text, "Title" } },
+		{ { text, "Title" }, { details, "Repeat" } },
 	}
 end
 
