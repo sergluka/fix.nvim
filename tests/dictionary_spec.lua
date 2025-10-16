@@ -11,7 +11,7 @@ describe("load XML dictionary", function()
 			assert.are.same(8, begin_string.tag)
 			assert.are.same("BeginString", begin_string.name)
 
-			local enum = dict:enum_by_value(35, "0")
+			local enum = dict:enum(35, "0")
 			assert.are.same("Heartbeat", enum.name)
 
 			local message = dict:message("0")

@@ -118,13 +118,13 @@ end
 
 --@param tag integer
 --@param value string
-function Dictionary:enum_by_value(tag, value)
+function Dictionary:enum(tag, value)
 	return self._enums[tag .. ":" .. value]
 end
 
 --@param value string
 function Dictionary:message(value)
-	return self:enum_by_value(35, value)
+	return self:enum(35, value)
 end
 
 return Dictionary
