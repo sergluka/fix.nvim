@@ -78,7 +78,7 @@ end
 ---@param dict Dictionary
 ---@param field Field
 local function annotate_field(opts, buf, ns, dict, field)
-	local tag = dict.fields[field.data.tag]
+	local tag = dict:field(field.data.tag)
 	if tag then
 		local tag_text = opts.annotate.field.tag.formatter(tag, field.data.value)
 		if tag_text then

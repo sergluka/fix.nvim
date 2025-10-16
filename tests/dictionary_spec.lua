@@ -7,12 +7,14 @@ describe("load XML dictionary", function()
 		it("load " .. version, function()
 			local dict = subject.load(version)
 
-			local begin_string = dict.fields[8]
+			local begin_string = dict:field(8)
 			assert.are.same(8, begin_string.tag)
 			assert.are.same("BeginString", begin_string.name)
 
-			local heartbeat = dict.messages["0"]
-			assert.are.same("0", heartbeat.type)
+			local heartbeat = dict:enum(35, "0")
+			assert.are.same("Heartbeat", heartbeat.name)
+
+			local heartbeat = dict:message("0")
 			assert.are.same("Heartbeat", heartbeat.name)
 		end)
 	end
