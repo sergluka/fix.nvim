@@ -1,23 +1,24 @@
-M = {}
+Dictionary = {}
 
 --- @param dict Dictionary
 --- @param fields Fields
-function M.single_line(dict, fields)
-	local msg_type = fields[35].data.value
+function Dictionary.single_line(dict, fields)
+	local msg_type = fields[35].value
 	local msg_type_name = dict:message(msg_type).name
 
 	local text = string.format(
 		"%s: %d: %s=>%s | %s | ",
-		fields[52].data.value,
-		fields[34].data.value,
-		fields[49].data.value,
-		fields[56].data.value,
+		fields[52].value,
+		fields[34].value,
+		fields[49].value,
+		fields[56].value,
 		msg_type_name
 	)
 
 	local details = ""
 	if msg_type_name == "ExecutionReport" then
-		details = "ExecType=" .. fields[150].data.value
+		local exec_type = dict:enum_by_value(150, fields[150].value)
+		details = "ExecType=" .. exec_type.name
 	end
 
 	return {
@@ -27,14 +28,14 @@ end
 
 --- @param dict Dictionary
 --- @param fields Fields
-function M.double_line(dict, fields)
+function Dictionary.double_line(dict, fields)
 	local text = string.format(
 		"%s: %d: %s=>%s | %s |",
-		fields[52].data.value,
-		fields[34].data.value,
-		fields[49].data.value,
-		fields[56].data.value,
-		dict.message(fields[35].data.value).name
+		fields[52].value,
+		fields[34].value,
+		fields[49].value,
+		fields[56].value,
+		dict:message(fields[35].value).name
 	)
 
 	local win_width = vim.api.nvim_win_get_width(0)
@@ -45,4 +46,4 @@ function M.double_line(dict, fields)
 	}
 end
 
-return M
+return Dictionary

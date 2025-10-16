@@ -9,9 +9,8 @@
 ---@field tag_end number
 ---@field value_start number
 ---@field value_end number
----@field data table
----@field data.tag number
----@field data.value number
+---@field tag number
+---@field value string
 
 ---@alias Fields { [number]: Field }
 
@@ -60,10 +59,8 @@ local function iter_messages(buf, on_message)
 						tag_end = tag_end,
 						value_start = value_start,
 						value_end = value_end,
-						data = {
-							tag = tag,
-							value = value,
-						},
+						tag = tag,
+						value = value,
 					}
 				end
 			end
@@ -78,9 +75,9 @@ end
 ---@param dict Dictionary
 ---@param field Field
 local function annotate_field(opts, buf, ns, dict, field)
-	local tag = dict:field(field.data.tag)
+	local tag = dict:field(field.tag)
 	if tag then
-		local tag_text = opts.annotate.field.tag.formatter(tag, field.data.value)
+		local tag_text = opts.annotate.field.tag.formatter(tag, field.value)
 		if tag_text then
 			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
 				virt_text = { tag_text },
@@ -88,7 +85,7 @@ local function annotate_field(opts, buf, ns, dict, field)
 			})
 		end
 
-		local value_text = opts.annotate.field.value.formatter(dict, tag, field.data.value)
+		local value_text = opts.annotate.field.value.formatter(dict, tag, field.value)
 		if value_text then
 			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
 				virt_text = { value_text },
@@ -134,7 +131,7 @@ function M.annotate(opts, bufnr, ns)
 	iter_messages(bufnr, function(lineno, fields)
 		local begin_string = fields[8]
 		if begin_string then
-			local version = begin_string.data.value
+			local version = begin_string.value
 			dict = require("ft-fix.dictionary").load(version)
 		end
 		if dict then
