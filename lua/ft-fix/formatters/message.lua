@@ -17,8 +17,17 @@ function Dictionary.single_line(dict, fields)
 
 	local details = ""
 	if msg_type_name == "ExecutionReport" then
-		local exec_type = dict:enum_by_value(150, fields[150].value)
-		details = "ExecType=" .. exec_type.name
+		local exec_type = dict:enum(150, fields[150].value)
+		details = exec_type.name
+	elseif msg_type_name == "NewOrderSingle" then
+		local ord_type = dict:enum(40, fields[40].value)
+		local time_in_force = dict:enum(59, fields[59].value)
+		local side = dict:enum(54, fields[54].value)
+		local amount = fields[38] and fields[38].value or "???"
+		local price = fields[44] and fields[44].value or "MKT"
+		local symbol = fields[55] and fields[55].value or "???"
+		details =
+			string.format("%s %s %s %s@%s %s", symbol, ord_type.name, side.name, amount, price, time_in_force.name)
 	end
 
 	return {
