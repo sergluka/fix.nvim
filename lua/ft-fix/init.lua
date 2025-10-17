@@ -8,6 +8,9 @@
 -- TODO: validation?
 
 ---@class FixOpts
+---@field ft table
+---@field ft.extensions string[]
+---@field ft.pattern string[]
 ---@field annotate table
 ---@field annotate.field table
 ---@field annotate.field.enabled boolean
@@ -19,6 +22,22 @@
 ---@field annotate.message.formatter fun(tag: FieldDef, value: string): {line: {text: string, highlight: string}}
 
 local M = {}
+
+--- @param opts FixOpts
+local function add_filetype(opts)
+	local patterns = {}
+	for _, pattern in ipairs(opts.ft.pattern) do
+		patterns[pattern] = "fix"
+	end
+	local extentions = {}
+	for _, ext in ipairs(opts.ft.extensions) do
+		extentions[ext] = "fix"
+	end
+	vim.filetype.add({
+		extension = extentions,
+		pattern = patterns,
+	})
+end
 
 local function init()
 	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
@@ -38,6 +57,10 @@ function M.setup(opts)
 	-- TODO: document
 	M.opts = vim.tbl_deep_extend("force", {
 		---@diagnostic disable: unused-local
+		ft = {
+			extensions = { "fix", "fixlog" },
+			pattern = { ".*%.fix.txt" },
+		},
 		annotate = {
 			field = {
 				enabled = true,
@@ -55,6 +78,8 @@ function M.setup(opts)
 			},
 		},
 	}, opts or {})
+
+	add_filetype(M.opts)
 
 	if not M.opts.annotate then
 		return
