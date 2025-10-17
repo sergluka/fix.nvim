@@ -5,6 +5,7 @@
 -- TODO: "materialize" annotation
 -- TODO: completition?
 -- TODO: validation?
+-- TODO: vimdoc
 
 ---@class FixOpts
 ---@field ft table
