@@ -1,4 +1,3 @@
--- TODO: config: tag/value virtual text output format
 -- TODO: support custom dictionaries
 -- TODO: commands to toggle annotations
 -- TODO: line-wise conceal (with custom formatting)
@@ -13,7 +12,7 @@
 ---@field annotate.field table
 ---@field annotate.field.enabled boolean
 ---@field annotate.field.tag.formatter fun(tag: FieldDef, value: string): {text: string, highlight: string}
----@field annotate.field.value.formatter fun(dict: Dictionary, tag: FieldDef, value: string): {text: string, highlight: string} -- FIXME
+---@field annotate.field.value.formatter fun(dict: Dictionary, tag: FieldDef, value: string): {text: string, highlight: string}
 ---@field annotate.message table
 ---@field annotate.message.enabled boolean
 ---@field annotate.message.position string "above" | "below"
