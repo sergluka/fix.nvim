@@ -77,20 +77,24 @@ end
 local function annotate_field(opts, buf, ns, dict, field)
 	local tag = dict:field(field.tag)
 	if tag then
-		local tag_text = opts.annotate.field.tag.formatter(tag, field.value)
-		if tag_text then
-			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
-				virt_text = { tag_text },
-				virt_text_pos = "inline",
-			})
+		if opts.annotate.tag.enabled then
+			local tag_text = opts.annotate.tag.formatter(tag, field.value)
+			if tag_text then
+				vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.tag_end, {
+					virt_text = { tag_text },
+					virt_text_pos = "inline",
+				})
+			end
 		end
 
-		local value_text = opts.annotate.field.value.formatter(dict, tag, field.value)
-		if value_text then
-			vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
-				virt_text = { value_text },
-				virt_text_pos = "inline",
-			})
+		if opts.annotate.value.enabled then
+			local value_text = opts.annotate.value.formatter(dict, tag, field.value)
+			if value_text then
+				vim.api.nvim_buf_set_extmark(buf, ns, field.lineno, field.value_end, {
+					virt_text = { value_text },
+					virt_text_pos = "inline",
+				})
+			end
 		end
 	end
 end
@@ -138,7 +142,7 @@ function M.annotate(opts, bufnr, ns)
 			if opts.annotate.message.enabled then
 				annotate_message(opts, bufnr, ns, dict, lineno, fields)
 			end
-			if opts.annotate.field.enabled then
+			if opts.annotate.tag.enabled or opts.annotate.value.enabled then
 				for _, field in pairs(fields) do
 					annotate_field(opts, bufnr, ns, dict, field)
 				end
