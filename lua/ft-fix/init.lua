@@ -62,13 +62,21 @@ function M.setup(opts)
 	end
 
 	local ns = vim.api.nvim_create_namespace("ft-fix")
+
 	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter", "BufAdd", "TextChanged", "TextChangedI" }, {
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
-		callback = function(ev)
+		callback = function(args)
 			-- TODO: add to settings, limit for filetype
-			if vim.bo[ev.buf].filetype == "fix" then
-				require("ft-fix.main").annotate(M.opts, ev.buf, ns)
+			if vim.bo[args.buf].filetype == "fix" then
+				require("ft-fix.main").annotate(M.opts, args.buf, ns)
 			end
+		end,
+	})
+
+	vim.api.nvim_create_autocmd("FileType", {
+		pattern = "fix",
+		callback = function(args)
+			require("ft-fix.main").annotate(M.opts, args.buf, ns)
 		end,
 	})
 end
