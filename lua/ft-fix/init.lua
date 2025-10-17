@@ -46,8 +46,6 @@ local DEFAULT_OPTS = {
 	},
 }
 
-local ns = vim.api.nvim_create_namespace("ft-fix")
-
 local function init()
 	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
 	---@diagnostic disable-next-line: inject-field
@@ -58,6 +56,8 @@ local function init()
 			files = { "src/parser.c" },
 		},
 	}
+
+	M.ns = vim.api.nvim_create_namespace("ft-fix")
 end
 
 --- @param opts FixOpts
@@ -76,12 +76,12 @@ local function register_filetype()
 	})
 end
 
-local function register_autocmds(ns)
+local function register_autocmds()
 	vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter", "BufAdd", "TextChanged", "TextChangedI" }, {
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
 		callback = function(args)
 			if vim.bo[args.buf].filetype == "fix" then
-				require("ft-fix.main").annotate(M.opts, args.buf, ns)
+				require("ft-fix.main").annotate(M.opts, args.buf, M.ns)
 			end
 		end,
 	})
@@ -89,7 +89,7 @@ local function register_autocmds(ns)
 	vim.api.nvim_create_autocmd("FileType", {
 		pattern = "fix",
 		callback = function(args)
-			require("ft-fix.main").annotate(M.opts, args.buf, ns)
+			require("ft-fix.main").annotate(M.opts, args.buf, M.ns)
 		end,
 	})
 end
@@ -124,7 +124,7 @@ function M.setup(opts)
 
 	register_filetype()
 	register_commands()
-	register_autocmds(ns)
+	register_autocmds()
 end
 
 ---@param opts FixOpts
@@ -154,7 +154,7 @@ function M.annotate_toggle(scope)
 	end
 
 	local buf = vim.api.nvim_get_current_buf()
-	require("ft-fix.main").annotate(M.opts, buf, ns)
+	require("ft-fix.main").annotate(M.opts, buf, M.ns)
 end
 
 init()
