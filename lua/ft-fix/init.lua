@@ -1,4 +1,5 @@
 -- TODO: support custom dictionaries
+-- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: add popup with tag description (and link to onixs) / https://www.onixs.biz/fix-dictionary/4.4/tagNum_1.html
 -- TODO: persistent cache
@@ -24,6 +25,8 @@
 
 local M = {}
 
+-- TODO: test
+-- TODO: document
 local DEFAULT_OPTS = {
 	ft = {
 		extensions = { "fix", "fixlog" },
@@ -100,7 +103,7 @@ local function register_commands()
 	local parser = cmdparse.ParameterParser.new({ name = "FIX", help = "FIX protocol" })
 	local toggle_subparser = parser:add_subparsers({ destination = "commands" })
 
-	local toggle = toggle_subparser:add_parser({ name = "toggle", help = "Toggle annotations" })
+	local toggle = toggle_subparser:add_parser({ name = "annotations", help = "Toggle annotations" })
 	toggle:add_parameter({
 		name = "scope",
 		required = false,
@@ -117,8 +120,6 @@ end
 
 ---@param opts FixOpts
 function M.setup(opts)
-	-- TODO: test
-	-- TODO: document
 	M.opts = vim.tbl_deep_extend("force", DEFAULT_OPTS, opts or {})
 	M.opts_initial = vim.deepcopy(M.opts)
 
@@ -130,6 +131,11 @@ end
 ---@param opts FixOpts
 ---@param scope "all | tag" | "value" | "message" | nil
 function M.annotate_toggle(scope)
+	local buf = vim.api.nvim_get_current_buf()
+	if vim.bo[buf].filetype ~= "fix" then
+		return
+	end
+
 	if scope == "all" or scope == nil then
 		local someone_is_enabled = M.opts.annotate.tag.enabled
 			or M.opts.annotate.value.enabled
@@ -153,7 +159,6 @@ function M.annotate_toggle(scope)
 		M.opts.annotate.message.enabled = not M.opts.annotate.message.enabled
 	end
 
-	local buf = vim.api.nvim_get_current_buf()
 	require("ft-fix.main").annotate(M.opts, buf, M.ns)
 end
 
