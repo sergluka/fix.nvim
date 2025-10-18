@@ -140,7 +140,10 @@ function M.annotate(opts, bufnr, ns)
 		end
 		if dict then
 			if opts.annotate.message.enabled then
-				annotate_message(opts, bufnr, ns, dict, lineno, fields)
+				local ok, result = pcall(annotate_message, opts, bufnr, ns, dict, lineno, fields)
+				if not ok then
+					vim.notify_once("failed to annotate message: " .. result, vim.log.levels.ERROR)
+				end
 			end
 			if opts.annotate.tag.enabled or opts.annotate.value.enabled then
 				for _, field in pairs(fields) do
