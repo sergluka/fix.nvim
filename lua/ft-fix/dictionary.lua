@@ -23,19 +23,21 @@ local xml2lua = require("xml2lua")
 ---@field description string
 
 ---@enum FixVersion
-FIX_VERSION = {
-	FIX_4_0 = "FIX.4.0",
-	FIX_4_1 = "FIX.4.1",
-	FIX_4_2 = "FIX.4.2",
-	FIX_4_3 = "FIX.4.3",
-	FIX_4_4 = "FIX.4.4",
-	FIXT_1_1 = "FIXT.1.1",
+FixVersion = {
+	FIX_2_7 = "2.7",
+	FIX_3_0 = "3.0",
+	FIX_4_0 = "4.0",
+	FIX_4_1 = "4.1",
+	FIX_4_2 = "4.2",
+	FIX_4_3 = "4.3",
+	FIX_4_4 = "4.4",
+	FIX_5_0 = "5.0",
 }
 
 ---@class Dictionary
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>
-Dictionary = {}
+local M = {}
 
 local function parse(dir, file)
 	local xml = xml2lua.loadFile(dir .. file)
@@ -83,12 +85,20 @@ local function load_enums(dir, file)
 	return dict
 end
 
+function M.new(fields, enums)
+	local self = {
+		_fields = fields or {},
+		_enums = enums or {},
+	}
+	setmetatable(self, { __index = M }) -- __index is set here
+	return self
+end
 ---@param version string
 ---@return Dictionary
-function Dictionary.load(version)
-	Dictionary._cache = Dictionary._cache or {}
-	if Dictionary._cache[version] then
-		return Dictionary._cache[version]
+function M.load(version)
+	M._cache = M._cache or {}
+	if M._cache[version] then
+		return M._cache[version]
 	end
 
 	print("Loading FIX dictionary for version " .. version)
@@ -96,35 +106,26 @@ function Dictionary.load(version)
 	local base_path = module_dir .. "../../docs/xml/" .. version .. "/Base/"
 	local fields = load_fields(base_path, "Fields.xml")
 	local enums = load_enums(base_path, "Enums.xml")
-	local dict = Dictionary.new(fields, enums)
-	Dictionary._cache[version] = dict
+	local dict = M.new(fields, enums)
+	M._cache[version] = dict
 
 	return dict
 end
 
-function Dictionary.new(fields, enums)
-	local self = {
-		_fields = fields or {},
-		_enums = enums or {},
-	}
-	setmetatable(self, { __index = Dictionary }) -- __index is set here
-	return self
-end
-
 --@param tag integer
-function Dictionary:field(tag)
+function M:field(tag)
 	return self._fields[tag]
 end
 
 --@param tag integer
 --@param value string
-function Dictionary:enum(tag, value)
+function M:enum(tag, value)
 	return self._enums[tag .. ":" .. value]
 end
 
 --@param value string
-function Dictionary:message(value)
+function M:message(value)
 	return self:enum(35, value)
 end
 
-return Dictionary
+return M

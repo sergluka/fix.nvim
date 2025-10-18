@@ -1,8 +1,9 @@
-Dictionary = {}
+M = {}
 
 --- @param dict Dictionary
---- @param fields Fields
-function Dictionary.single_line(dict, fields)
+--- @param message Message
+function M.single_line(dict, message)
+	local fields = message.fields
 	local msg_type = fields[35].value
 	local msg_type_name = dict:message(msg_type).name
 
@@ -63,8 +64,9 @@ function Dictionary.single_line(dict, fields)
 end
 
 --- @param dict Dictionary
---- @param fields Fields
-function Dictionary.double_line(dict, fields)
+--- @param message Message
+function M.double_line(dict, message)
+	local fields = message.fields
 	local text = string.format(
 		"%s: %d: %s=>%s | %s |",
 		fields[52].value,
@@ -82,4 +84,4 @@ function Dictionary.double_line(dict, fields)
 	}
 end
 
-return Dictionary
+return M

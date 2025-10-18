@@ -1,3 +1,5 @@
+-- TODO: support groups
+-- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
 -- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
@@ -7,6 +9,9 @@
 -- TODO: completition?
 -- TODO: validation?
 -- TODO: vimdoc
+
+local main = require("ft-fix.main")
+local utils = require("ft-fix.utils")
 
 ---@class FixOpts
 ---@field ft table
@@ -21,7 +26,7 @@
 ---@field annotate.message table
 ---@field annotate.message.enabled boolean
 ---@field annotate.message.position string "above" | "below"
----@field annotate.message.formatter fun(tag: FieldDef, value: string): {line: {text: string, highlight: string}}
+---@field annotate.message.formatter fun(dict: Dictionary, message: Message): {line: {text: string, highlight: string}}
 
 local M = {}
 
@@ -159,7 +164,20 @@ function M.annotate_toggle(scope)
 		M.opts.annotate.message.enabled = not M.opts.annotate.message.enabled
 	end
 
-	require("ft-fix.main").annotate(M.opts, buf, M.ns)
+	main.annotate(M.opts, buf, M.ns)
+end
+
+function M.open_online_tag_info()
+	local buf = vim.api.nvim_get_current_buf()
+	if vim.bo[buf].filetype ~= "fix" then
+		return
+	end
+	local message, field = main.get_field_under_cursor(buf)
+	if message == nil or field == nil then
+		return
+	end
+
+	utils.open_url(string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", message.version, field.tag))
 end
 
 init()
