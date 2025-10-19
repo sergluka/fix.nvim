@@ -1,15 +1,17 @@
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
+-- TODO: add option for custom tags
 -- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
--- TODO: persistent cache
 -- TODO: "materialize" annotation
 -- TODO: completition?
 -- TODO: validation?
+-- TODO: documentation
 -- TODO: vimdoc
 -- TODO: add command to browse tag info
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
+-- TODO: docs: add link to original FIX xmls
 
 local main = require("ft-fix.main")
 local utils = require("ft-fix.utils")
