@@ -1,7 +1,3 @@
--- TODO
--- set breakat=\|
--- set wrap
--- syntax match BreakPipe /|/ conceal cchar=⏎
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 
 local dictionary = require("ft-fix.dictionary")
@@ -197,7 +193,6 @@ function M.annotate(opts, bufnr, ns)
 	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
 
 	local dict = nil
-	iter_messages(bufnr, function(lineno, fields)
 	iter_messages(bufnr, function(message)
 		local begin_string = message.fields[8]
 		if begin_string then

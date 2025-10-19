@@ -3,12 +3,13 @@
 -- TODO: support custom dictionaries
 -- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
--- TODO: add popup with tag description (and link to onixs) / https://www.onixs.biz/fix-dictionary/4.4/tagNum_1.html
 -- TODO: persistent cache
 -- TODO: "materialize" annotation
 -- TODO: completition?
 -- TODO: validation?
 -- TODO: vimdoc
+-- TODO: add command to browse tag info
+-- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 
 local main = require("ft-fix.main")
 local utils = require("ft-fix.utils")
