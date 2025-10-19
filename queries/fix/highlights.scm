@@ -23,8 +23,8 @@
   (value) @number
   (#eq? @_tag "10"))
 
-(field
-  (tag) @_tag
-  (value) @constant
-  (#eq? @_tag "8"))
+; conceal for \x001 SOH 
+((delimiter) @delimiter @punctuation.delimiter (#set! conceal "|")
+  (#eq? @delimiter "")
+)
 
