@@ -13,9 +13,6 @@
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: docs: add link to original FIX xmls
 
-local main = require("ft-fix.main")
-local utils = require("ft-fix.utils")
-
 ---@class FixOpts
 ---@field ft table
 ---@field ft.extensions string[]
@@ -30,6 +27,9 @@ local utils = require("ft-fix.utils")
 ---@field annotate.message.enabled boolean
 ---@field annotate.message.position string "above" | "below"
 ---@field annotate.message.formatter fun(dict: Dictionary, message: Message): {line: {text: string, highlight: string}}
+
+local annotate = require("ft-fix.annotate")
+local utils = require("ft-fix.utils")
 
 local M = {}
 
@@ -57,21 +57,6 @@ local DEFAULT_OPTS = {
 	},
 }
 
-local function init()
-	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-	---@diagnostic disable-next-line: inject-field
-	parser_config.fix = {
-		install_info = {
-			-- url = "https://github.com/sergluka/tree-sitter-fix",
-			url = "~/dev/projects/nvim/tree-sitter-fix",
-			files = { "src/parser.c" },
-		},
-	}
-
-	M.ns = vim.api.nvim_create_namespace("ft-fix")
-end
-
---- @param opts FixOpts
 local function register_filetype()
 	local patterns = {}
 	for _, pattern in ipairs(M.opts.ft.pattern) do
@@ -92,7 +77,7 @@ local function register_autocmds()
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
 		callback = function(args)
 			if vim.bo[args.buf].filetype == "fix" then
-				require("ft-fix.main").annotate(M.opts, args.buf, M.ns)
+				annotate.annotate(M.opts, args.buf, M.ns)
 			end
 		end,
 	})
@@ -100,7 +85,7 @@ local function register_autocmds()
 	vim.api.nvim_create_autocmd("FileType", {
 		pattern = "fix",
 		callback = function(args)
-			require("ft-fix.main").annotate(M.opts, args.buf, M.ns)
+			annotate.annotate(M.opts, args.buf, M.ns)
 		end,
 	})
 end
@@ -126,17 +111,31 @@ local function register_commands()
 	cmdparse.create_user_command(parser)
 end
 
+local function init()
+	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
+	---@diagnostic disable-next-line: inject-field
+	parser_config.fix = {
+		install_info = {
+			-- url = "https://github.com/sergluka/tree-sitter-fix",
+			url = "~/dev/projects/nvim/tree-sitter-fix",
+			files = { "src/parser.c" },
+		},
+	}
+
+	M.ns = vim.api.nvim_create_namespace("ft-fix")
+
+	register_commands()
+end
+
 ---@param opts FixOpts
 function M.setup(opts)
 	M.opts = vim.tbl_deep_extend("force", DEFAULT_OPTS, opts or {})
 	M.opts_initial = vim.deepcopy(M.opts)
 
 	register_filetype()
-	register_commands()
 	register_autocmds()
 end
 
----@param opts FixOpts
 ---@param scope "all | tag" | "value" | "message" | nil
 function M.annotate_toggle(scope)
 	local buf = vim.api.nvim_get_current_buf()
@@ -167,7 +166,7 @@ function M.annotate_toggle(scope)
 		M.opts.annotate.message.enabled = not M.opts.annotate.message.enabled
 	end
 
-	main.annotate(M.opts, buf, M.ns)
+	annotate.annotate(M.opts, buf, M.ns)
 end
 
 function M.open_online_tag_info()
@@ -175,7 +174,7 @@ function M.open_online_tag_info()
 	if vim.bo[buf].filetype ~= "fix" then
 		return
 	end
-	local message, field = main.get_field_under_cursor(buf)
+	local message, field = annotate.get_field_under_cursor(buf)
 	if message == nil or field == nil then
 		return
 	end
