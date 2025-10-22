@@ -12,6 +12,7 @@
 -- TODO: add command to browse tag info
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: docs: add link to original FIX xmls
+-- TODO: CI: busted, linter
 
 ---@class FixOpts
 ---@field ft table
@@ -20,14 +21,27 @@
 ---@field annotate table
 ---@field annotate.field table
 ---@field annotate.field.tag.enabled boolean
----@field annotate.field.tag.formatter fun(tag: FieldDef, value: string): {text: string, highlight: string}
+---@field annotate.field.tag.formatter fun(field: Field): {text: string, highlight: string}
 ---@field annotate.field.value.enabled boolean
----@field annotate.field.value.formatter fun(dict: Dictionary, tag: FieldDef, value: string): {text: string, highlight: string}
+---@field annotate.field.value.formatter fun(field: Field): {text: string, highlight: string}
 ---@field annotate.message table
 ---@field annotate.message.enabled boolean
 ---@field annotate.message.position string "above" | "below"
----@field annotate.message.formatter fun(dict: Dictionary, message: Message): {line: {text: string, highlight: string}}
+---@field annotate.message.formatter fun(message: Message): {line: {text: string, highlight: string}}
 
+---@enum FixVersion
+FixVersion = {
+	FIX_2_7 = "2.7",
+	FIX_3_0 = "3.0",
+	FIX_4_0 = "4.0",
+	FIX_4_1 = "4.1",
+	FIX_4_2 = "4.2",
+	FIX_4_3 = "4.3",
+	FIX_4_4 = "4.4",
+	FIX_5_0 = "5.0",
+}
+
+local document = require("ft-fix.document")
 local annotate = require("ft-fix.annotate")
 local utils = require("ft-fix.utils")
 
@@ -136,7 +150,7 @@ function M.setup(opts)
 	register_autocmds()
 end
 
----@param scope "all | tag" | "value" | "message" | nil
+---@param scope? "all" | "tag" | "value" | "message"
 function M.annotate_toggle(scope)
 	local buf = vim.api.nvim_get_current_buf()
 	if vim.bo[buf].filetype ~= "fix" then
@@ -174,7 +188,7 @@ function M.open_online_tag_info()
 	if vim.bo[buf].filetype ~= "fix" then
 		return
 	end
-	local message, field = annotate.get_field_under_cursor(buf)
+	local message, field = document.get_field_under_cursor(buf)
 	if message == nil or field == nil then
 		return
 	end

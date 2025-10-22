@@ -22,18 +22,6 @@ local xml2lua = require("xml2lua")
 ---@field name string
 ---@field description string
 
----@enum FixVersion
-FixVersion = {
-	FIX_2_7 = "2.7",
-	FIX_3_0 = "3.0",
-	FIX_4_0 = "4.0",
-	FIX_4_1 = "4.1",
-	FIX_4_2 = "4.2",
-	FIX_4_3 = "4.3",
-	FIX_4_4 = "4.4",
-	FIX_5_0 = "5.0",
-}
-
 ---@class Dictionary
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>

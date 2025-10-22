@@ -1,4 +1,5 @@
 local ts_utils = require("nvim-treesitter.ts_utils")
+local dictionary = require("ft-fix.dictionary")
 
 local M = {}
 
@@ -97,6 +98,27 @@ local function node_to_message(buf, message_node)
 	}
 end
 
+local function decode(message)
+	local begin_string = message.fields[8]
+	local dict = nil
+	if begin_string then
+		local version = begin_string.value
+		dict = dictionary.load(version)
+	end
+	if dict then
+		for _, field in pairs(message.fields) do
+			local field_def = dict:field(field.tag)
+			if field_def then
+				field.tag_text = field_def.name
+			end
+			local enum_def = dict:enum(field.tag, field.value)
+			if enum_def then
+				field.value_text = enum_def.name
+			end
+		end
+	end
+end
+
 ---@param buf number
 ---@param on_message fun(message: Message)
 function M.iter_messages(buf, on_message)
@@ -111,6 +133,7 @@ function M.iter_messages(buf, on_message)
 	for message_node in root:iter_children() do
 		if message_node:type() == "message" then
 			local message = node_to_message(buf, message_node)
+			decode(message)
 			on_message(message)
 		end
 	end

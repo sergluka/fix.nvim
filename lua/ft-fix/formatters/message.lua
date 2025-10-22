@@ -1,11 +1,9 @@
 M = {}
 
---- @param dict Dictionary
 --- @param message Message
-function M.single_line(dict, message)
+function M.single_line(message)
 	local fields = message.fields
-	local msg_type = fields[35].value
-	local msg_type_name = dict:message(msg_type).name
+	local msg_type_name = fields[35].value_text
 
 	local text = string.format(
 		"%s: %d: %s=>%s | %s",
@@ -13,7 +11,7 @@ function M.single_line(dict, message)
 		fields[34].value,
 		fields[49].value,
 		fields[56].value,
-		msg_type_name
+		fields[35].value_text
 	)
 
 	if fields[43] and fields[43].value == "Y" then
@@ -22,26 +20,24 @@ function M.single_line(dict, message)
 
 	local details = ""
 	if msg_type_name == "ExecutionReport" then
-		local exec_type = dict:enum(150, fields[150].value)
-		if exec_type.name == "Trade" or exec_type.name == "TradeCorrect" then
+		local exec_type = fields[150].value_text
+		if exec_type == "Trade" or exec_type == "TradeCorrect" then
 			local client_order_id = fields[11] and fields[11].value
 			local exec_id = fields[17] and fields[17].value or "MISSING"
 			local price = fields[44] and fields[44].value or "MKT"
 			local amount = fields[38] and fields[38].value or "???"
-			details =
-				string.format("%s %s@%s ClOrdId=%s ExecId=%s", exec_type.name, amount, price, client_order_id, exec_id)
+			details = string.format("%s %s@%s ClOrdId=%s ExecId=%s", exec_type, amount, price, client_order_id, exec_id)
 		else
-			details = exec_type.name
+			details = exec_type
 		end
 	elseif msg_type_name == "NewOrderSingle" then
-		local ord_type = dict:enum(40, fields[40].value)
-		local time_in_force = dict:enum(59, fields[59].value)
-		local side = dict:enum(54, fields[54].value)
+		local ord_type = fields[40].value_text
+		local time_in_force = fields[59].value_text
+		local side = fields[54].value_text
 		local amount = fields[38] and fields[38].value or "???"
 		local price = fields[44] and fields[44].value or "MKT"
 		local symbol = fields[55] and fields[55].value or "???"
-		details =
-			string.format("%s %s %s %s@%s %s", symbol, ord_type.name, side.name, amount, price, time_in_force.name)
+		details = string.format("%s %s %s %s@%s %s", symbol, ord_type, side, amount, price, time_in_force)
 	elseif msg_type_name == "Logout" then
 		details = fields[58] and fields[58].value or ""
 	elseif msg_type_name == "ResendRequest" then
@@ -63,9 +59,8 @@ function M.single_line(dict, message)
 	}
 end
 
---- @param dict Dictionary
 --- @param message Message
-function M.double_line(dict, message)
+function M.double_line(message)
 	local fields = message.fields
 	local text = string.format(
 		"%s: %d: %s=>%s | %s |",
@@ -73,7 +68,7 @@ function M.double_line(dict, message)
 		fields[34].value,
 		fields[49].value,
 		fields[56].value,
-		dict:message(fields[35].value).name
+		fields[35].value_text
 	)
 
 	local win_width = vim.api.nvim_win_get_width(0)

@@ -1,12 +1,10 @@
 local M = {}
 
---- @param dict Dictionary
---- @param tag FieldDef
---- @param value string
-function M.common(dict, tag, value)
-	local enum = dict:enum(tag.tag, value)
-	if enum then
-		return { "(" .. enum.name .. ")", "Comment" }
+--- @param field Field
+function M.common(field)
+	local value = field.value_text
+	if value then
+		return { "(" .. value .. ")", "Comment" }
 	end
 end
 
