@@ -43,6 +43,7 @@ FixVersion = {
 
 local document = require("ft-fix.document")
 local annotate = require("ft-fix.annotate")
+local yank = require("ft-fix.yank")
 local utils = require("ft-fix.utils")
 
 local M = {}
@@ -194,6 +195,16 @@ function M.open_online_tag_info()
 	end
 
 	utils.open_url(string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", message.version, field.tag))
+end
+
+---@param regname string
+function M.yank_field(regname)
+	yank.yank_field(M.opts, regname)
+end
+
+---@param regname string
+function M.yank_message(regname)
+	yank.yank_message(M.opts, regname)
 end
 
 init()

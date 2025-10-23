@@ -1,4 +1,5 @@
 ---@class Field
+---@field index number
 ---@field tag number
 ---@field tag_text string
 ---@field tag_start number
@@ -13,7 +14,6 @@
 --- @field lineno number
 --- @field fields { [number]: Field }
 
-local dictionary = require("ft-fix.dictionary")
 local document = require("ft-fix.document")
 
 local M = {}
@@ -23,7 +23,7 @@ local M = {}
 ---@param ns number
 ---@param lineno number
 ---@param field Field
-local function annotate_field(opts, buf, ns, lineno, field)
+function M.annotate_field(opts, buf, ns, lineno, field)
 	if field.tag_text and opts.annotate.tag.enabled then
 		local tag_text = opts.annotate.tag.formatter(field)
 		if tag_text then
@@ -49,7 +49,7 @@ end
 ---@param buf number
 ---@param ns number
 ---@param message Message
-local function annotate_message(opts, buf, ns, message)
+function M.annotate_message(opts, buf, ns, message)
 	local line_shift = 0
 	if opts.annotate.message.position == "above" then
 		line_shift = 0
@@ -82,7 +82,7 @@ function M.annotate(opts, bufnr, ns)
 		end
 		if opts.annotate.tag.enabled or opts.annotate.value.enabled then
 			for _, field in pairs(message.fields) do
-				annotate_field(opts, bufnr, ns, message.lineno, field)
+				M.annotate_field(opts, bufnr, ns, message.lineno, field)
 			end
 		end
 		-- end

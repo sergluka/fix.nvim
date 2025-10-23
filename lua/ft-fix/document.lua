@@ -32,8 +32,9 @@ end
 
 ---@param buf number
 ---@param field_node TSNode
+---@param index number
 ---@return Field
-local function node_to_field(buf, field_node)
+local function node_to_field(buf, field_node, index)
 	local tag_node = nil
 	local equals_node = nil
 	local value_node = nil
@@ -60,6 +61,7 @@ local function node_to_field(buf, field_node)
 	local value_text = vim.treesitter.get_node_text(value_node, buf)
 
 	return {
+		index = index,
 		tag_start = tag_start_col,
 		tag_end = tag_end_col,
 		value_start = value_start_col,
@@ -75,10 +77,12 @@ end
 local function node_to_message(buf, message_node)
 	local lineno, _, _, _ = message_node:range()
 	local fields = {}
+	local index = 1
 	for field_node in message_node:iter_children() do
 		if field_node:type() == "field" then
-			local field = node_to_field(buf, field_node)
+			local field = node_to_field(buf, field_node, index)
 			fields[field.tag] = field
+			index = index + 1
 		end
 	end
 
@@ -152,15 +156,21 @@ function M.get_field_under_cursor(buf)
 		if field_node == nil or field_node:type() ~= "field" then
 			error("unexpected document structure")
 		end
-		local field = node_to_field(buf, field_node)
 
 		local message_node = field_node:parent()
 		if message_node == nil or message_node:type() ~= "message" then
 			error("unexpected document structure")
 		end
 		local message = node_to_message(buf, message_node)
+		decode(message)
 
-		return message, field
+		for _, field in pairs(message.fields) do
+			local _, tag_start_col = field_node:range()
+			if field.tag_start == tag_start_col then
+				return message, field
+			end
+		end
+		error("field not found in message")
 	else
 		return nil, nil
 	end
