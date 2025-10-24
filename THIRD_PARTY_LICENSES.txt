@@ -1,0 +1,11 @@
+This project uses data derived from the FIX Repository,
+which is licensed by FIX Protocol Limited (FPL) under the following terms:
+
+"Licence to Access, Download and Use the FIX Repository", Version 1 (October 2009)
+
+© FIX Protocol Limited. All rights reserved.
+The FIX Repository is provided by FPL on an "as is" basis without warranties.
+FPL has no liability for any adaptations or modifications made to the original data.
+
+For details, see: https://www.fixtrading.org/
+

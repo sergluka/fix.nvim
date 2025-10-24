@@ -1,3 +1,7 @@
+-- This plugin includes data derived from the FIX Repository
+-- © FIX Protocol Limited (FPL). Used under licence.
+-- FPL is not responsible for any modifications or errors in this implementation.
+
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
