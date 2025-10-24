@@ -1,5 +1,22 @@
+--- @class Message
+--- @field version FixVersion
+--- @field lineno number
+--- @field fields { [number]: Field }
+
+---@class Field
+---@field index number
+---@field tag number
+---@field tag_text string
+---@field tag_start number
+---@field tag_end number
+---@field value string
+---@field value_text string
+---@field value_start number
+---@field value_end number
+
 local ts_utils = require("nvim-treesitter.ts_utils")
 local dictionary = require("ft-fix.dictionary")
+-- local message = require("ft-fix.message")
 
 local M = {}
 
@@ -11,7 +28,7 @@ local versions = {
 	["FIX.4.2"] = FixVersion.FIX_4_2,
 	["FIX.4.3"] = FixVersion.FIX_4_3,
 	["FIX.4.4"] = FixVersion.FIX_4_4,
-	["FIX.5.0"] = FixVersion.FIX_5_0,
+	["FIXT.1.1"] = FixVersion.FIX_5_0,
 }
 
 ---@param fields {[number]: Field}

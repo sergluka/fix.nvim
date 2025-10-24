@@ -1,19 +1,3 @@
----@class Field
----@field index number
----@field tag number
----@field tag_text string
----@field tag_start number
----@field tag_end number
----@field value string
----@field value_text string
----@field value_start number
----@field value_end number
-
---- @class Message
---- @field version FixVersion
---- @field lineno number
---- @field fields { [number]: Field }
-
 local document = require("ft-fix.document")
 
 local M = {}
@@ -75,7 +59,7 @@ function M.annotate(opts, bufnr, ns)
 
 	document.iter_messages(bufnr, function(message)
 		if opts.annotate.message.enabled then
-			local ok, result = pcall(annotate_message, opts, bufnr, ns, message)
+			local ok, result = pcall(M.annotate_message, opts, bufnr, ns, message)
 			if not ok then
 				vim.notify_once("failed to annotate message: " .. result, vim.log.levels.ERROR)
 			end
