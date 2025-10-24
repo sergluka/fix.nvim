@@ -2,21 +2,21 @@
 -- © FIX Protocol Limited (FPL). Used under licence.
 -- FPL is not responsible for any modifications or errors in this implementation.
 
+-- TODO: support FIX 5
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
 -- TODO: add option for custom tags
 -- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
--- TODO: "materialize" annotation
 -- TODO: completition?
 -- TODO: validation?
 -- TODO: documentation
 -- TODO: vimdoc
--- TODO: add command to browse tag info
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: docs: add link to original FIX xmls
 -- TODO: CI: busted, linter
+-- TODO: handle v mode for yank
 
 ---@class FixOpts
 ---@field ft table
@@ -42,7 +42,6 @@ FixVersion = {
 	FIX_4_2 = "4.2",
 	FIX_4_3 = "4.3",
 	FIX_4_4 = "4.4",
-	FIX_5_0 = "5.0",
 }
 
 local document = require("ft-fix.document")
@@ -135,6 +134,7 @@ local function init()
 	---@diagnostic disable-next-line: inject-field
 	parser_config.fix = {
 		install_info = {
+			--- XXX: replace
 			-- url = "https://github.com/sergluka/tree-sitter-fix",
 			url = "~/dev/projects/nvim/tree-sitter-fix",
 			files = { "src/parser.c" },

@@ -108,7 +108,8 @@ local function node_to_message(buf, message_node)
 	if ok then
 		version = result
 	else
-		vim.notify_once("Cannot get FIX version, fallback to FIX.4.0. " .. result, vim.log.levels.WARN)
+		vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
+		print(result)
 		version = FixVersion.FIX_4_0
 	end
 
