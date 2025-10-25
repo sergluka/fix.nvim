@@ -62,13 +62,7 @@ function M.yank_message(opts, regname)
 		return
 	end
 
-	local fields = {} ---@type Field[]
-	for _, field in pairs(message.fields) do
-		table.insert(fields, field)
-	end
-	table.sort(fields, function(lhs, rhs)
-		return lhs.index < rhs.index
-	end)
+	local fields = message:list_fields()
 
 	local txt_fields = {}
 	for _, field in pairs(fields) do

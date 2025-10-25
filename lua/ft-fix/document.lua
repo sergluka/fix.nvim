@@ -1,7 +1,7 @@
---- @class Message
---- @field version FixVersion
---- @field lineno number
---- @field fields { [number]: Field }
+-- --- @class Message
+-- --- @field version FixVersion
+-- --- @field lineno number
+-- --- @field fields { [number]: Field }
 
 ---@class Field
 ---@field index number
@@ -128,11 +128,7 @@ local function node_to_message(buf, message_node)
 		version = FixVersion.FIX_4_0
 	end
 
-	return {
-		version = version,
-		lineno = lineno,
-		fields = fields,
-	}
+	return require("ft-fix.message").new(version, lineno, fields)
 end
 
 ---@param message Message
