@@ -89,9 +89,9 @@ function M.load(version)
 		return M._cache[version]
 	end
 
-    -- TODO: consider using 1128 (ApplVerID) and 1137 (DefaultApplVerID) to reference the correct SP.
-    -- It may be required for validation in the future.
-    -- For now, we default to using SP2, where all fields are defined.
+	-- TODO: consider using 1128 (ApplVerID) and 1137 (DefaultApplVerID) to reference the correct SP.
+	-- It may be required for validation in the future.
+	-- For now, we default to using SP2, where all fields are defined.
 	if version == "FIXT.1.1" then
 		version = "FIX.5.0SP2"
 	end

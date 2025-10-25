@@ -16,7 +16,6 @@
 
 local ts_utils = require("nvim-treesitter.ts_utils")
 local dictionary = require("ft-fix.dictionary")
--- local message = require("ft-fix.message")
 
 local M = {}
 
@@ -88,6 +87,22 @@ local function node_to_field(buf, field_node, index)
 	}
 end
 
+--- @param fields {[string]: Field}
+--- @param field Field
+local function insert_field(fields, field)
+	local key = field.tag
+
+	for index = 1, 100 do
+		if fields[key] == nil then
+			fields[key] = field
+			return
+		end
+		---@diagnostic disable-next-line: cast-local-type
+		key = field.tag .. ":" .. index
+	end
+	vim.notify_once("Too many duplicate tags, something is wrong", vim.log.levels.WARN)
+end
+
 ---@param buf number
 ---@param message_node TSNode
 ---@return Message
@@ -98,7 +113,7 @@ local function node_to_message(buf, message_node)
 	for field_node in message_node:iter_children() do
 		if field_node:type() == "field" then
 			local field = node_to_field(buf, field_node, index)
-			fields[field.tag] = field
+			insert_field(fields, field)
 			index = index + 1
 		end
 	end
