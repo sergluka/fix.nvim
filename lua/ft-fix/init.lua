@@ -42,6 +42,7 @@ FixVersion = {
 	FIX_4_2 = "4.2",
 	FIX_4_3 = "4.3",
 	FIX_4_4 = "4.4",
+	FIX_5_0 = "FIXT.1.1",
 }
 
 local document = require("ft-fix.document")

@@ -89,7 +89,14 @@ function M.load(version)
 		return M._cache[version]
 	end
 
+    -- TODO: consider using 1128 (ApplVerID) and 1137 (DefaultApplVerID) to reference the correct SP.
+    -- It may be required for validation in the future.
+    -- For now, we default to using SP2, where all fields are defined.
+	if version == "FIXT.1.1" then
+		version = "FIX.5.0SP2"
+	end
 	print("Loading FIX dictionary for version " .. version)
+
 	local module_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
 	local base_path = module_dir .. "../../docs/xml/" .. version .. "/Base/"
 	local fields = load_fields(base_path, "Fields.xml")

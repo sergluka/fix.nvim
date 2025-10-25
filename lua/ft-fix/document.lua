@@ -120,6 +120,7 @@ local function node_to_message(buf, message_node)
 	}
 end
 
+---@param message Message
 local function decode(message)
 	local begin_string = message.fields[8]
 	local dict = nil
