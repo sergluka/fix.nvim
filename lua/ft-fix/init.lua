@@ -2,7 +2,6 @@
 -- © FIX Protocol Limited (FPL). Used under licence.
 -- FPL is not responsible for any modifications or errors in this implementation.
 
--- TODO: support FIX 5
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
@@ -17,6 +16,7 @@
 -- TODO: docs: add link to original FIX xmls
 -- TODO: CI: busted, linter
 -- TODO: handle v mode for yank
+-- TODO: yank in picker
 
 ---@class FixOpts
 ---@field ft table
