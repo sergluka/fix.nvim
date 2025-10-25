@@ -1,19 +1,3 @@
--- --- @class Message
--- --- @field version FixVersion
--- --- @field lineno number
--- --- @field fields { [number]: Field }
-
----@class Field
----@field index number
----@field tag number
----@field tag_text string
----@field tag_start number
----@field tag_end number
----@field value string
----@field value_text string
----@field value_start number
----@field value_end number
-
 local ts_utils = require("nvim-treesitter.ts_utils")
 local dictionary = require("ft-fix.dictionary")
 
@@ -31,16 +15,18 @@ local versions = {
 }
 
 ---@param fields {[number]: Field}
----@return FixVersion
+---@return FixVersion?
 local function get_version(fields)
 	local begin_string = fields[8]
 	if not begin_string then
-		error("Missing BeginString (tag 8)")
+		print("Missing BeginString (tag 8)")
+		return nil
 	end
 
 	local version = versions[begin_string.value]
 	if not version then
-		error("Unknown FIX version: " .. begin_string.value)
+		print("Unknown BeginString (tag 8): " .. begin_string.value)
+		return nil
 	end
 
 	return version
@@ -76,7 +62,7 @@ local function node_to_field(buf, field_node, index)
 	local tag_text = vim.treesitter.get_node_text(tag_node, buf)
 	local value_text = vim.treesitter.get_node_text(value_node, buf)
 
-	return {
+	return require("ft-fix.field").new({
 		index = index,
 		tag_start = tag_start_col,
 		tag_end = tag_end_col,
@@ -84,7 +70,7 @@ local function node_to_field(buf, field_node, index)
 		value_end = value_end_col,
 		tag = tonumber(tag_text),
 		value = value_text,
-	}
+	})
 end
 
 --- @param fields {[string]: Field}
@@ -118,13 +104,9 @@ local function node_to_message(buf, message_node)
 		end
 	end
 
-	local version
-	local ok, result = pcall(get_version, fields)
-	if ok then
-		version = result
-	else
+	local version = get_version(fields)
+	if not version then
 		vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
-		print(result)
 		version = FixVersion.FIX_4_0
 	end
 
@@ -133,14 +115,9 @@ end
 
 ---@param message Message
 local function decode(message)
-	local begin_string = message.fields[8]
-	local dict = nil
-	if begin_string then
-		local version = begin_string.value
-		dict = dictionary.load(version)
-	end
+	local dict = dictionary.load(message.version)
 	if dict then
-		for _, field in pairs(message.fields) do
+		for _, field in pairs(message:fields()) do
 			local field_def = dict:field(field.tag)
 			if field_def then
 				field.tag_text = field_def.name
@@ -194,7 +171,7 @@ function M.get_field_under_cursor(buf)
 		local message = node_to_message(buf, message_node)
 		decode(message)
 
-		for _, field in pairs(message.fields) do
+		for _, field in pairs(message:fields()) do
 			local _, tag_start_col = field_node:range()
 			if field.tag_start == tag_start_col then
 				return message, field

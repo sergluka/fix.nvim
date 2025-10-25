@@ -65,7 +65,7 @@ function M.annotate(opts, bufnr, ns)
 			end
 		end
 		if opts.annotate.tag.enabled or opts.annotate.value.enabled then
-			for _, field in pairs(message.fields) do
+			for _, field in pairs(message:fields()) do
 				M.annotate_field(opts, bufnr, ns, message.lineno, field)
 			end
 		end

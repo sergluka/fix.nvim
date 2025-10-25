@@ -81,6 +81,7 @@ function M.new(fields, enums)
 	setmetatable(self, { __index = M }) -- __index is set here
 	return self
 end
+
 ---@param version string
 ---@return Dictionary
 function M.load(version)
