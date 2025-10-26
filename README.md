@@ -27,7 +27,7 @@ dependencies = {
     "manoelcampos/xml2lua",
     "ColinKennedy/mega.cmdparse",
     "ColinKennedy/mega.logging",
-    "folke/snacks.nvim", -- optional, in case you want the tags picker
+    "folke/snacks.nvim", -- optional, in case you want the fields picker
   }
   opts = {
     -- Configuration options here
@@ -40,7 +40,7 @@ dependencies = {
 
 | Command | Lua API | Description |
 |---------|--------------|-------------|
-| `:FIX --help` | | Show help. |
+| `:FIX --help` | | Show help |
 | `:FIX annotations [all, tag, value, message]` | `require("fix").annotate(scope)` | Toggle annotations |
 | `:FIX picker` | `require("fix.snacks").open()` | Show fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open Onixs tag info page in browser |
@@ -84,7 +84,6 @@ Plugin does not set any keybindings by default. You can set your own keybindings
 ```lua
 -- ftplugin/fix.lua
 
-
 local fix = require("fix")
 
 vim.keymap.set("n", "<localleader>t", function() fix.annotate_toggle("message") end, { desc = "fix: toggle message annotation", buffer = true })
@@ -114,7 +113,7 @@ vim.keymap.set({ "n", "v" }, "[G", function() ts_move.goto_previous_end("@commen
 
 ## Note
 
-Because of an [NVIM limitation](https://github.com/neovim/neovim/issues/16166), the virtual text above the first line is not visible. This can be worked around as follows:
+Because of an [NVIM limitation](https://github.com/neovim/neovim/issues/16166), the virtual text above the first line is not displayed, and the first message title will not be visible. This issue can be worked around as follows:
 
 - Adding an empty line at the beginning of the file
 - Pressing `C-b` to scroll on top after opening the file
