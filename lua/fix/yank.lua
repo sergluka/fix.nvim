@@ -1,6 +1,6 @@
 local M = {}
 
-local document = require("ft-fix.document")
+local document = require("fix.document")
 
 local ns = vim.api.nvim_create_namespace("blink_region")
 

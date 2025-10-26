@@ -11,9 +11,8 @@
 -- TODO: completition?
 -- TODO: validation?
 -- TODO: documentation
--- TODO: vimdoc
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
--- TODO: docs: add link to original FIX xmls
+-- TODO: vimdoc
 -- TODO: CI: busted, linter
 -- TODO: handle v mode for yank
 -- TODO: yank in picker
@@ -46,10 +45,10 @@ FixVersion = {
 	FIX_5_0 = "FIXT.1.1",
 }
 
-local document = require("ft-fix.document")
-local annotate = require("ft-fix.annotate")
-local yank = require("ft-fix.yank")
-local utils = require("ft-fix.utils")
+local document = require("fix.document")
+local annotate = require("fix.annotate")
+local yank = require("fix.yank")
+local utils = require("fix.utils")
 
 local M = {}
 
@@ -63,16 +62,16 @@ local DEFAULT_OPTS = {
 	annotate = {
 		tag = {
 			enabled = true,
-			formatter = require("ft-fix.formatters.tag").common,
+			formatter = require("fix.formatters.tag").common,
 		},
 		value = {
 			enabled = true,
-			formatter = require("ft-fix.formatters.value").common,
+			formatter = require("fix.formatters.value").common,
 		},
 		message = {
 			enabled = true,
 			position = "above",
-			formatter = require("ft-fix.formatters.message").default,
+			formatter = require("fix.formatters.message").default,
 		},
 	},
 }

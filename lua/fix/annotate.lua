@@ -1,4 +1,4 @@
-local document = require("ft-fix.document")
+local document = require("fix.document")
 
 local M = {}
 

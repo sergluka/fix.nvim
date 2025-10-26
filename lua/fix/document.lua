@@ -1,5 +1,5 @@
 local ts_utils = require("nvim-treesitter.ts_utils")
-local dictionary = require("ft-fix.dictionary")
+local dictionary = require("fix.dictionary")
 
 local M = {}
 
@@ -62,7 +62,7 @@ local function node_to_field(buf, field_node, index)
 	local tag_text = vim.treesitter.get_node_text(tag_node, buf)
 	local value_text = vim.treesitter.get_node_text(value_node, buf)
 
-	return require("ft-fix.field").new({
+	return require("fix.field").new({
 		index = index,
 		tag_start = tag_start_col,
 		tag_end = tag_end_col,
@@ -110,7 +110,7 @@ local function node_to_message(buf, message_node)
 		version = FixVersion.FIX_4_0
 	end
 
-	return require("ft-fix.message").new(version, lineno, fields)
+	return require("fix.message").new(version, lineno, fields)
 end
 
 ---@param message Message

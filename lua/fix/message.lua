@@ -20,7 +20,7 @@ end
 function M:field(tag)
 	local field = self._fields[tag]
 	if field == nil then
-		return require("ft-fix.field").empty()
+		return require("fix.field").empty()
 	end
 
 	return field

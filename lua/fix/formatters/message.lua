@@ -36,7 +36,7 @@ function M.default(message)
 		local amount = message:field(38).value or "???"
 		local price = message:field(44).value or "MKT"
 		local symbol = message:field(55).value or "???"
-		details = string.format("%s %s %s %s@%s %s", symbol, ord_type, side, amount, price, time_in_force)
+		details = string.format("%s %s %s %s %s @ %s", side, time_in_force, ord_type, amount, symbol, price)
 	elseif msg_type_name == "Logout" then
 		details = message:field(58).value or ""
 	elseif msg_type_name == "ResendRequest" then
