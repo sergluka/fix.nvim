@@ -1,15 +1,15 @@
 local document = require("fix.document")
-
 local snacks = require("snacks")
 
 local M = {}
 
 function M.open()
 	local items = {}
+	local message_idx = 0
 	document.iter_messages(0, function(message)
 		local file = vim.api.nvim_buf_get_name(0)
 
-		for idx, field in pairs(message:list_fields()) do
+		for _, field in pairs(message:list_fields()) do
 			local msg_type = message:field(35).value_text
 			local sender = message:field(49).value
 			local seq_no = message:field(34).value
@@ -24,8 +24,10 @@ function M.open()
 				field.tag_text or "",
 				field.value_text or ""
 			)
+			-- assuming that message won't have more than 100,000 fields
+			local index = message_idx * 100000 + field.index
 			table.insert(items, {
-				index = idx,
+				index = index,
 				text = text,
 				message = message,
 				field = field,
@@ -35,6 +37,7 @@ function M.open()
 				end_pos = { message.lineno + 1, field.value_end },
 			})
 		end
+		message_idx = message_idx + 1
 	end)
 
 	snacks.picker({
@@ -67,6 +70,10 @@ function M.open()
 
 			return ret
 		end,
+
+		sort = {
+			fields = { "idx" },
+		},
 
 		confirm = function(picker, item)
 			picker:close()
