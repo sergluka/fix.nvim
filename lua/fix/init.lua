@@ -62,11 +62,11 @@ local default_settings = {
 	annotate = {
 		tag = {
 			enabled = true,
-			formatter = require("fix.formatters.tag").common,
+			formatter = require("fix.formatters.tag").default,
 		},
 		value = {
 			enabled = true,
-			formatter = require("fix.formatters.value").common,
+			formatter = require("fix.formatters.value").default,
 		},
 		message = {
 			enabled = true,

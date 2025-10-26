@@ -1,7 +1,7 @@
 local M = {}
 
 --- @param field Field
-function M.common(field)
+function M.default(field)
 	local value = field.value_text
 	if value then
 		return { "(" .. value .. ")", "Comment" }
