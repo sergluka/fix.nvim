@@ -10,9 +10,9 @@ function M.open()
 		local file = vim.api.nvim_buf_get_name(0)
 
 		for idx, field in pairs(message:list_fields()) do
-			local msg_type = message.fields[35].value_text
-			local sender = message.fields[49].value
-			local seq_no = message.fields[34].value
+			local msg_type = message:field(35).value_text
+			local sender = message:field(49).value
+			local seq_no = message:field(34).value
 
 			local text = string.format(
 				"#%d:%s:%s%s=%s:%s=%s",
@@ -38,19 +38,18 @@ function M.open()
 	end)
 
 	snacks.picker({
-		title = "FIX tags",
-		layout = {
-			preset = "default",
-			preview = nil,
+		title = "FIX fields",
+		preview = {
+			wrap = true,
 		},
 		items = items,
 
 		format = function(item, _)
 			local field = item.field
 			local message = item.message
-			local msg_type = message.fields[35]
-			local sender = message.fields[49].value
-			local seq_no = message.fields[34].value
+			local msg_type = message:field(35)
+			local sender = message:field(49).value
+			local seq_no = message:field(34).value
 
 			local ret = {}
 			ret[#ret + 1] = { string.format("#%s %s => %s ", seq_no, sender, msg_type.value_text), "Comment" }

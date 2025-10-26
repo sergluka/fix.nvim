@@ -142,7 +142,7 @@ local function init()
 		},
 	}
 
-	M.ns = vim.api.nvim_create_namespace("ft-fix")
+	M.ns = vim.api.nvim_create_namespace("fix-protocol")
 
 	register_commands()
 end
