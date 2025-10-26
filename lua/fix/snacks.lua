@@ -1,9 +1,14 @@
 local document = require("fix.document")
-local snacks = require("snacks")
 
 local M = {}
 
 function M.open()
+	local ok, snacks = pcall(require, "snacks")
+	if not ok then
+		print("Snacks is not installed.")
+		return
+	end
+
 	local items = {}
 	local message_idx = 0
 	document.iter_messages(0, function(message)

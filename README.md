@@ -23,7 +23,12 @@ Plugin for FIX protocol viewing in Neovim.
 ```lua
 {
   "sergluka/fix.nvim",
-  dependencies = { "manoelcampos/xml2lua", "ColinKennedy/mega.cmdparse", "ColinKennedy/mega.logging" },
+dependencies = {
+    "manoelcampos/xml2lua",
+    "ColinKennedy/mega.cmdparse",
+    "ColinKennedy/mega.logging",
+    "folke/snacks.nvim", -- optional, in case you want the tags picker
+  }
   opts = {
     -- Configuration options here
   }
