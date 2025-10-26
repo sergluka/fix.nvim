@@ -8,8 +8,8 @@
 ; BeginString
 (field
   (tag) @_tag
-  (value) @constant 
-  (#eq? @_tag "8"))  
+  (value) @constant
+  (#eq? @_tag "8"))
 
 ; BodyLength
 (field
