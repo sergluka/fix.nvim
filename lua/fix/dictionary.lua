@@ -85,17 +85,18 @@ end
 ---@param version string
 ---@return Dictionary
 function M.load(version)
-	M._cache = M._cache or {}
-	if M._cache[version] then
-		return M._cache[version]
-	end
-
 	-- TODO: consider using 1128 (ApplVerID) and 1137 (DefaultApplVerID) to reference the correct SP.
 	-- It may be required for validation in the future.
 	-- For now, we default to using SP2, where all fields are defined.
 	if version == "FIXT.1.1" then
 		version = "FIX.5.0SP2"
 	end
+
+	M._cache = M._cache or {}
+	if M._cache[version] then
+		return M._cache[version]
+	end
+
 	print("Loading FIX dictionary for version " .. version)
 
 	local module_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
