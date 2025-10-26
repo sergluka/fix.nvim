@@ -10,7 +10,6 @@
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: completition?
 -- TODO: validation?
--- TODO: documentation
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: vimdoc
 -- TODO: CI: busted, linter

@@ -54,31 +54,39 @@ Plugin for FIX protocol viewing in Neovim.
 
 ```lua
 {
-  -- rules for filetype detection
+  -- Rules for filetype detection. Corresponds to `vim.filetype.add.filetypes`.
   ft = {
     extensions = { "fix", "fixlog" },
     pattern = { ".*%.fix.txt" },
   },
   annotate = {
-    -- tag annotation
+    -- Tag annotation
     tag = {
       enabled = true,
       formatter = require("fix.formatters.tag").default,
     },
-    -- value annotation
+    -- Value annotation
     value = {
       enabled = true,
       formatter = require("fix.formatters.value").default,
     },
-    -- message (title) annotation
+    -- Message (title) annotation
     message = {
       enabled = true,
-      position = "above",
+      position = "above", -- "above" | "below"
       formatter = require("fix.formatters.message").default,
     },
   },
 }
 ```
+
+## Note
+
+Because of an [NVIM limitation](https://github.com/neovim/neovim/issues/16166), the virtual text above the first line is not visible. This can be worked around as follows:
+
+- Adding an empty line at the beginning of the file
+- Pressing `C-b` to scroll on top after opening the file
+- Using `annotate.message.position = "below"` to display the message title below the message
 
 ## Links
 
