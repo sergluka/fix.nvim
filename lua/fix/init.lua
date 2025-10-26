@@ -113,18 +113,48 @@ local function register_commands()
 	local cmdparse = require("mega.cmdparse")
 
 	local parser = cmdparse.ParameterParser.new({ name = "FIX", help = "FIX protocol" })
-	local toggle_subparser = parser:add_subparsers({ destination = "commands" })
+	local top_subparser = parser:add_subparsers({ destination = "commands" })
 
-	local toggle = toggle_subparser:add_parser({ name = "annotations", help = "Toggle annotations" })
+	local toggle = top_subparser:add_parser({ name = "annotations", help = "Toggle annotations" })
 	toggle:add_parameter({
 		name = "scope",
 		required = false,
 		choices = { "all", "tag", "value", "message" },
 		help = "Type of annotation",
 	})
-
-	parser:set_execute(function(data)
+	toggle:set_execute(function(data)
 		M.annotate_toggle(data.namespace.scope)
+	end)
+
+	local picker = top_subparser:add_parser({ name = "picker", help = "Open fields picker" })
+	picker:set_execute(function()
+		require("fix.snacks").open()
+	end)
+
+	local browse = top_subparser:add_parser({ name = "browse", help = "Open tag info online" })
+	browse:set_execute(function()
+		require("fix").browse_tag_online()
+	end)
+
+	local yank_parser = top_subparser:add_parser({ name = "yank", help = "Yank annotations" })
+	yank_parser:add_parameter({
+		name = "yank",
+		required = false,
+		choices = { "field", "message" },
+		help = "Type of annotation",
+		yank_parser:add_parameter({
+			name = "--reg",
+			required = false,
+			help = "Register",
+		}),
+	})
+	yank_parser:set_execute(function(data)
+		local register = data.namespace.reg
+		if data.namespace.yank == "field" then
+			M.yank_field(register)
+		elseif data.namespace.yank == "message" then
+			M.yank_message(register)
+		end
 	end)
 
 	cmdparse.create_user_command(parser)
@@ -189,7 +219,7 @@ function M.annotate_toggle(scope)
 	annotate.annotate(M.opts, buf, M.ns)
 end
 
-function M.open_online_tag_info()
+function M.browse_tag_online()
 	local buf = vim.api.nvim_get_current_buf()
 	if vim.bo[buf].filetype ~= "fix" then
 		return
