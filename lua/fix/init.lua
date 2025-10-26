@@ -54,7 +54,7 @@ local M = {}
 
 -- TODO: test
 -- TODO: document
-local DEFAULT_OPTS = {
+local default_settings = {
 	ft = {
 		extensions = { "fix", "fixlog" },
 		pattern = { ".*%.fix.txt" },
@@ -165,9 +165,7 @@ local function init()
 	---@diagnostic disable-next-line: inject-field
 	parser_config.fix = {
 		install_info = {
-			--- XXX: replace
-			-- url = "https://github.com/sergluka/tree-sitter-fix",
-			url = "~/dev/projects/nvim/tree-sitter-fix",
+			url = "https://github.com/sergluka/tree-sitter-fix",
 			files = { "src/parser.c" },
 		},
 	}
@@ -179,7 +177,7 @@ end
 
 ---@param opts FixOpts
 function M.setup(opts)
-	M.opts = vim.tbl_deep_extend("force", DEFAULT_OPTS, opts or {})
+	M.opts = vim.tbl_deep_extend("force", default_settings, opts or {})
 	M.opts_initial = vim.deepcopy(M.opts)
 
 	register_filetype()
@@ -229,15 +227,28 @@ function M.browse_tag_online()
 		return
 	end
 
-	utils.open_url(string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", message.version, field.tag))
+	local versions = {
+		[FixVersion.FIX_2_7] = "2.7",
+		[FixVersion.FIX_3_0] = "3.0",
+		[FixVersion.FIX_4_0] = "4.0",
+		[FixVersion.FIX_4_1] = "4.1",
+		[FixVersion.FIX_4_2] = "4.2",
+		[FixVersion.FIX_4_3] = "4.3",
+		[FixVersion.FIX_4_4] = "4.4",
+		[FixVersion.FIX_5_0] = "5.0",
+	}
+
+	utils.open_url(
+		string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", versions[message.version], field.tag)
+	)
 end
 
----@param regname string
+---@param regname string?
 function M.yank_field(regname)
 	yank.yank_field(M.opts, regname)
 end
 
----@param regname string
+---@param regname string?
 function M.yank_message(regname)
 	yank.yank_message(M.opts, regname)
 end

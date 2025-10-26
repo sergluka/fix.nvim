@@ -38,7 +38,7 @@ local function blink(buf, start_row, start_col, end_row, end_col)
 end
 
 ---@param opts FixOpts
----@param regname string
+---@param regname string?
 function M.yank_field(opts, regname)
 	local buf = vim.api.nvim_get_current_buf()
 	local message, field = document.get_field_under_cursor(buf)
@@ -47,14 +47,14 @@ function M.yank_field(opts, regname)
 	end
 
 	local text = field_to_text(opts, field)
-	vim.fn.setreg(regname, text)
+	vim.fn.setreg(regname or "", text)
 
 	local lineno = message.lineno
 	blink(buf, lineno, field.tag_start, lineno, field.value_end)
 end
 
 ---@param opts FixOpts
----@param regname string
+---@param regname string?
 function M.yank_message(opts, regname)
 	local buf = vim.api.nvim_get_current_buf()
 	local message, _ = document.get_field_under_cursor(buf)
@@ -70,7 +70,7 @@ function M.yank_message(opts, regname)
 	end
 	local text = table.concat(txt_fields, "|")
 
-	vim.fn.setreg(regname, text)
+	vim.fn.setreg(regname or "", text)
 
 	local lineno = message.lineno
 	blink(buf, lineno, fields[1].tag_start, lineno, fields[#fields].value_end)

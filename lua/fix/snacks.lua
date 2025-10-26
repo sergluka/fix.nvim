@@ -39,9 +39,6 @@ function M.open()
 
 	snacks.picker({
 		title = "FIX fields",
-		preview = {
-			wrap = true,
-		},
 		items = items,
 
 		format = function(item, _)
