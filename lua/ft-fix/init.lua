@@ -17,6 +17,7 @@
 -- TODO: CI: busted, linter
 -- TODO: handle v mode for yank
 -- TODO: yank in picker
+-- TODO: highlight values based on Type
 
 ---@class FixOpts
 ---@field ft table

@@ -157,6 +157,7 @@ function M.get_field_under_cursor(buf)
 	if node == nil then
 		return nil, nil
 	end
+
 	local node_type = node:type()
 	if node_type == "tag" or node_type == "value" or node_type == "equals" then
 		local field_node = node:parent()
