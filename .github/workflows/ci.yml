@@ -11,7 +11,8 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        uses: actions/checkout@v4
 
       - name: stylua
         uses: JohnnyMorganz/stylua-action@v4
@@ -27,15 +28,20 @@ jobs:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      - name: checkout
         uses: actions/checkout@v4
 
       - uses: leafo/gh-actions-lua@v12
         with:
-          luaVersion: "5.1.5"
+          luaVersion: "5.1"
+
+      - name: install luarocks
+        uses: leafo/gh-actions-luarocks@v6
 
       - name: install deps
-        run: luarocks install xml2lua
+        run: |
+          luarocks install xml2lua 
+          luarocks install busted
 
-      - name: run busted
-        uses: lunarmodules/busted@v0
+      - name: run tests
+        run: busted --verbose
