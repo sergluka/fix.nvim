@@ -1,7 +1,3 @@
--- This plugin includes data derived from the FIX Repository
--- © FIX Protocol Limited (FPL). Used under licence.
--- FPL is not responsible for any modifications or errors in this implementation.
-
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
@@ -32,22 +28,11 @@
 ---@field annotate.message.position string "above" | "below"
 ---@field annotate.message.formatter fun(message: Message): {line: {text: string, highlight: string}}
 
----@enum FixVersion
-FixVersion = {
-	FIX_2_7 = "FIX.2.7",
-	FIX_3_0 = "FIX.3.0",
-	FIX_4_0 = "FIX.4.0",
-	FIX_4_1 = "FIX.4.1",
-	FIX_4_2 = "FIX.4.2",
-	FIX_4_3 = "FIX.4.3",
-	FIX_4_4 = "FIX.4.4",
-	FIX_5_0 = "FIXT.1.1",
-}
-
 local document = require("fix.document")
 local annotate = require("fix.annotate")
 local yank = require("fix.yank")
 local utils = require("fix.utils")
+local consts = require("fix.consts")
 
 local M = {}
 
@@ -163,14 +148,14 @@ function M.browse_tag_online()
 	end
 
 	local versions = {
-		[FixVersion.FIX_2_7] = "2.7",
-		[FixVersion.FIX_3_0] = "3.0",
-		[FixVersion.FIX_4_0] = "4.0",
-		[FixVersion.FIX_4_1] = "4.1",
-		[FixVersion.FIX_4_2] = "4.2",
-		[FixVersion.FIX_4_3] = "4.3",
-		[FixVersion.FIX_4_4] = "4.4",
-		[FixVersion.FIX_5_0] = "5.0",
+		[consts.FixVersion.FIX_2_7] = "2.7",
+		[consts.FixVersion.FIX_3_0] = "3.0",
+		[consts.FixVersion.FIX_4_0] = "4.0",
+		[consts.FixVersion.FIX_4_1] = "4.1",
+		[consts.FixVersion.FIX_4_2] = "4.2",
+		[consts.FixVersion.FIX_4_3] = "4.3",
+		[consts.FixVersion.FIX_4_4] = "4.4",
+		[consts.FixVersion.FIX_5_0] = "5.0",
 	}
 
 	utils.open_url(

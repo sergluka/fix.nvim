@@ -22,8 +22,6 @@ local function register_treesitter()
 			files = { "src/parser.c" },
 		},
 	}
-
-	M.ns = vim.api.nvim_create_namespace("fix-protocol")
 end
 
 local function register_commands()
@@ -40,7 +38,7 @@ local function register_commands()
 		help = "Type of annotation",
 	})
 	toggle:set_execute(function(data)
-		M.annotate_toggle(data.namespace.scope)
+		fix.annotate_toggle(data.namespace.scope)
 	end)
 
 	local picker = top_subparser:add_parser({ name = "picker", help = "Open fields picker" })
@@ -50,7 +48,7 @@ local function register_commands()
 
 	local browse = top_subparser:add_parser({ name = "browse", help = "Open tag info online" })
 	browse:set_execute(function()
-		require("fix").browse_tag_online()
+		fix.browse_tag_online()
 	end)
 
 	local yank_parser = top_subparser:add_parser({ name = "yank", help = "Yank annotations" })
@@ -68,9 +66,9 @@ local function register_commands()
 	yank_parser:set_execute(function(data)
 		local register = data.namespace.reg
 		if data.namespace.yank == "field" then
-			M.yank_field(register)
+			fix.yank_field(register)
 		elseif data.namespace.yank == "message" then
-			M.yank_message(register)
+			fix.yank_message(register)
 		end
 	end)
 

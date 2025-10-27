@@ -34,7 +34,7 @@ end
 ---@param ns number
 ---@param message Message
 function M.annotate_message(opts, buf, ns, message)
-	local line_shift = 0
+	local line_shift
 	if opts.annotate.message.position == "above" then
 		line_shift = 0
 	else

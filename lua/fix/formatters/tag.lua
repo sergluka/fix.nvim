@@ -1,4 +1,4 @@
-M = {}
+local M = {}
 
 --- @param field Field
 --- @return {text: string, highlight: string} | nil

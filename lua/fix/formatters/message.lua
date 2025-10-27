@@ -1,4 +1,4 @@
-M = {}
+local M = {}
 
 --- @param message Message
 function M.default(message)

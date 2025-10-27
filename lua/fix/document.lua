@@ -1,17 +1,18 @@
 local ts_utils = require("nvim-treesitter.ts_utils")
 local dictionary = require("fix.dictionary")
+local consts = require("fix.consts")
 
 local M = {}
 
 local versions = {
-	["FIX.2.7"] = FixVersion.FIX_2_7,
-	["FIX.3.0"] = FixVersion.FIX_3_0,
-	["FIX.4.0"] = FixVersion.FIX_4_0,
-	["FIX.4.1"] = FixVersion.FIX_4_1,
-	["FIX.4.2"] = FixVersion.FIX_4_2,
-	["FIX.4.3"] = FixVersion.FIX_4_3,
-	["FIX.4.4"] = FixVersion.FIX_4_4,
-	["FIXT.1.1"] = FixVersion.FIX_5_0,
+	["FIX.2.7"] = consts.FixVersion.FIX_2_7,
+	["FIX.3.0"] = consts.FixVersion.FIX_3_0,
+	["FIX.4.0"] = consts.FixVersion.FIX_4_0,
+	["FIX.4.1"] = consts.FixVersion.FIX_4_1,
+	["FIX.4.2"] = consts.FixVersion.FIX_4_2,
+	["FIX.4.3"] = consts.FixVersion.FIX_4_3,
+	["FIX.4.4"] = consts.FixVersion.FIX_4_4,
+	["FIXT.1.1"] = consts.FixVersion.FIX_5_0,
 }
 
 ---@param fields {[number]: Field}
@@ -107,7 +108,7 @@ local function node_to_message(buf, message_node)
 	local version = get_version(fields)
 	if not version then
 		vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
-		version = FixVersion.FIX_4_0
+		version = consts.FixVersion.FIX_4_0
 	end
 
 	return require("fix.message").new(version, lineno, fields)
