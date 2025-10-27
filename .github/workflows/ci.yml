@@ -20,51 +20,22 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --check .
 
-      - name: cache luarocks
-        uses: actions/cache@v4
-        with:
-          path: ~/.luarocks
-          key: ${{ runner.os }}-luarocks-${{ hashFiles('.luacheckrc') }}
-          restore-keys: |
-            ${{ runner.os }}-luarocks-
-
-      - name: install luacheck
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y luarocks
-          luarocks --lua-version=5.1 --local install luacheck
-
       - name: luacheck
-        run: ~/.luarocks/bin/luacheck .
+        uses: lunarmodules/luacheck@v1
 
   test:
     name: tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "5.1.5"
 
       - name: install deps
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y lua5.1 luarocks
-          luarocks --lua-version=5.1 --local install xml2lua busted
-
-      - name: cache luarocks
-        uses: actions/cache@v4
-        with:
-          path: ~/.luarocks
-          key: ${{ runner.os }}-busted-${{ hashFiles('rockspec*', 'lua/**/*.lua', 'tests/**/*.lua') }}
-          restore-keys: |
-            ${{ runner.os }}-busted-
+        run: luarocks install xml2lua
 
       - name: run busted
-        env:
-          # Make sure busted can find your modules under lua/
-          LUA_PATH: "./lua/?.lua;./lua/?/init.lua;./tests/?.lua;./tests/?/init.lua;$HOME/.luarocks/share/lua/5.1/?.lua;$HOME/.luarocks/share/lua/5.1/?/init.lua;;"
-          LUA_CPATH: "$HOME/.luarocks/lib/lua/5.1/?.so;;"
-        run: |
-          ~/.luarocks/bin/busted \
-            --lpath="$LUA_PATH" \
-            --pattern=_spec\.lua \
-            --output=UT \
-            tests
+        uses: lunarmodules/busted@v0
