@@ -1,6 +1,19 @@
 # fix.nvim
 
-Plugin for FIX protocol viewing in Neovim.
+A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/) messages
+
+---
+
+## Features
+
+- **Syntax highlighting** for FIX messages (via [tree-sitter-fix](https://github.com/sergluka/tree-sitter-fix))
+- **Tag and value annotation** with virtual text
+- **Easy navigation** between fields and messages
+- **Support for multiple FIX versions**
+- **SOH (`\x01`) character concealing** for readability
+- **Field picker** (optional, with [snacks.nvim](https://github.com/folke/snacks.nvim))
+
+---
 
 ## Screenshots
 
@@ -8,33 +21,29 @@ Plugin for FIX protocol viewing in Neovim.
 ![Annotated](./docs/demo/annotate.png)
 ![Picker](./docs/demo/picker.png)
 
-## Features
-
-- Syntax highlighting for FIX messages
-- Tag and values annotation
-- Easy navigation between fields
-- Support for multiple FIX versions
-- SOH \x01 character concealing
+---
 
 ## Installation
 
-### With lazy.nvim
+### [lazy.nvim](https://github.com/folke/lazy.nvim)
 
 ```lua
 {
   "sergluka/fix.nvim",
-dependencies = {
+  dependencies = {
     "manoelcampos/xml2lua",
     "ColinKennedy/mega.cmdparse",
     "ColinKennedy/mega.logging",
-    "folke/snacks.nvim", -- optional, in case you want the fields picker
-  }
+    "folke/snacks.nvim", -- optional, for the fields picker
+  },
   opts = {
     -- Configuration options here
-  }
+  },
   build = ":TSUpdate fix",
 }
 ```
+
+---
 
 ## Usage
 
@@ -44,14 +53,16 @@ dependencies = {
 | `:FIX annotations [all, tag, value, message]` | `require("fix").annotate(scope)` | Toggle annotations |
 | `:FIX picker` | `require("fix.snacks").open()` | Show fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open Onixs tag info page in browser |
-| `:FIX yank field [--reg=<REGISTER>]` | `require("fix").yank_field(reg)` | Yanks annotated field under cursor |
-| `:FIX yank message [--reg=<REGISTER>]` | `require("fix").yank_message(reg)` | Yanks annotated message under cursor |
+| `:FIX yank field [--reg=<REGISTER>]` | `require("fix").yank_field(reg)` | Yank annotated field under cursor |
+| `:FIX yank message [--reg=<REGISTER>]` | `require("fix").yank_message(reg)` | Yank annotated message under cursor |
+
+---
 
 ## Configuration
 
 ```lua
 {
-  -- Rules for filetype detection. Corresponds to `vim.filetype.add.filetypes`.
+  -- Filetype detection rules (see `vim.filetype.add.filetypes`)
   ft = {
     extensions = { "fix", "fixlog" },
     pattern = { ".*%.fix.txt" },
@@ -77,13 +88,13 @@ dependencies = {
 }
 ```
 
+---
+
 ## Keybindings
 
-Plugin does not set any keybindings by default. You can set your own keybindings as follows:
+No keybindings are set by default. Example mappings (add to `ftplugin/fix.lua` or your config):
 
 ```lua
--- ftplugin/fix.lua
-
 local fix = require("fix")
 
 vim.keymap.set("n", "<localleader>t", function() fix.annotate_toggle("message") end, { desc = "fix: toggle message annotation", buffer = true })
@@ -111,15 +122,19 @@ vim.keymap.set({ "n", "v" }, "]G", function() ts_move.goto_next_end("@comment") 
 vim.keymap.set({ "n", "v" }, "[G", function() ts_move.goto_previous_end("@comment") end, { desc = "fix: previous comment end", buffer = true })
 ```
 
-## Note
+---
 
-Because of an [NVIM limitation](https://github.com/neovim/neovim/issues/16166), the virtual text above the first line is not displayed, and the first message title will not be visible. This issue can be worked around as follows:
+## Known Issues
 
-- Adding an empty line at the beginning of the file
-- Pressing `C-b` to scroll on top after opening the file
-- Using `annotate.message.position = "below"` to display the message title below the message
+ Due to a [Neovim limitation](https://github.com/neovim/neovim/issues/16166), virtual text above the first line is not displayed, so the first message title may not be visible. Workarounds:
+
+- Add an empty line at the beginning of the file
+- Press `C-b` to scroll to the top after opening
+- Use `annotate.message.position = "below"` to display the message title below the message
+
+---
 
 ## Links
 
-- [tree-sitter fix basic parser](https://github.com/sergluka/tree-sitter-fix)
+- [tree-sitter-fix parser](https://github.com/sergluka/tree-sitter-fix)
 - [FIX repository](https://www.fixtrading.org/standards/fix-repository/)

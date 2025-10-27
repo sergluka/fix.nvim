@@ -8,7 +8,7 @@
 -- TODO: add option for custom tags
 -- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
--- TODO: completition?
+-- TODO: competition?
 -- TODO: validation?
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: vimdoc
