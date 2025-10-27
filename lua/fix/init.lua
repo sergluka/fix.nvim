@@ -51,6 +51,8 @@ local utils = require("fix.utils")
 
 local M = {}
 
+local ns = vim.api.nvim_create_namespace("fix-protocol")
+
 -- TODO: test
 -- TODO: document
 local default_settings = {
@@ -95,7 +97,7 @@ local function register_autocmds()
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
 		callback = function(args)
 			if vim.bo[args.buf].filetype == "fix" then
-				annotate.annotate(M.opts, args.buf, M.ns)
+				annotate.annotate(M.opts, args.buf, ns)
 			end
 		end,
 	})
@@ -106,72 +108,6 @@ local function register_autocmds()
 			annotate.annotate(M.opts, args.buf, M.ns)
 		end,
 	})
-end
-
-local function register_commands()
-	local cmdparse = require("mega.cmdparse")
-
-	local parser = cmdparse.ParameterParser.new({ name = "FIX", help = "FIX protocol" })
-	local top_subparser = parser:add_subparsers({ destination = "commands" })
-
-	local toggle = top_subparser:add_parser({ name = "annotations", help = "Toggle annotations" })
-	toggle:add_parameter({
-		name = "scope",
-		required = false,
-		choices = { "all", "tag", "value", "message" },
-		help = "Type of annotation",
-	})
-	toggle:set_execute(function(data)
-		M.annotate_toggle(data.namespace.scope)
-	end)
-
-	local picker = top_subparser:add_parser({ name = "picker", help = "Open fields picker" })
-	picker:set_execute(function()
-		require("fix.snacks").open()
-	end)
-
-	local browse = top_subparser:add_parser({ name = "browse", help = "Open tag info online" })
-	browse:set_execute(function()
-		require("fix").browse_tag_online()
-	end)
-
-	local yank_parser = top_subparser:add_parser({ name = "yank", help = "Yank annotations" })
-	yank_parser:add_parameter({
-		name = "yank",
-		required = false,
-		choices = { "field", "message" },
-		help = "Type of annotation",
-		yank_parser:add_parameter({
-			name = "--reg",
-			required = false,
-			help = "Register",
-		}),
-	})
-	yank_parser:set_execute(function(data)
-		local register = data.namespace.reg
-		if data.namespace.yank == "field" then
-			M.yank_field(register)
-		elseif data.namespace.yank == "message" then
-			M.yank_message(register)
-		end
-	end)
-
-	cmdparse.create_user_command(parser)
-end
-
-local function init()
-	local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-	---@diagnostic disable-next-line: inject-field
-	parser_config.fix = {
-		install_info = {
-			url = "https://github.com/sergluka/tree-sitter-fix",
-			files = { "src/parser.c" },
-		},
-	}
-
-	M.ns = vim.api.nvim_create_namespace("fix-protocol")
-
-	register_commands()
 end
 
 ---@param opts FixOpts
@@ -251,7 +187,5 @@ end
 function M.yank_message(regname)
 	yank.yank_message(M.opts, regname)
 end
-
-init()
 
 return M
