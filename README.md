@@ -17,9 +17,9 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
 
 ## Screenshots
 
-![Annotated without title](./docs/demo/annotate-wo-title.png)
-![Annotated](./docs/demo/annotate.png)
-![Picker](./docs/demo/picker.png)
+![Annotated without title](./media/annotate-wo-title.png)
+![Annotated](./media/annotate.png)
+![Picker](./media/picker.png)
 
 ---
 
