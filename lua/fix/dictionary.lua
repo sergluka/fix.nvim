@@ -100,7 +100,7 @@ function M.load(version)
 	print("Loading FIX dictionary for version " .. version)
 
 	local module_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
-	local base_path = module_dir .. "../../docs/xml/" .. version .. "/Base/"
+	local base_path = module_dir .. "../../xml/" .. version .. "/Base/"
 	local fields = load_fields(base_path, "Fields.xml")
 	local enums = load_enums(base_path, "Enums.xml")
 	local dict = M.new(fields, enums)
