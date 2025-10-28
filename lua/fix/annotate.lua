@@ -49,24 +49,24 @@ end
 
 ---@param opts FixOpts
 ---@param bufnr number
----@param ns number
-function M.annotate(opts, bufnr, ns)
+---@param ns_id number
+function M.annotate(opts, bufnr, ns_id)
 	if not vim.api.nvim_buf_is_loaded(bufnr) then
 		return
 	end
 
-	vim.api.nvim_buf_clear_namespace(bufnr, ns, 0, -1)
+	vim.api.nvim_buf_clear_namespace(bufnr, ns_id, 0, -1)
 
 	document.iter_messages(bufnr, function(message)
 		if opts.annotate.message.enabled then
-			local ok, result = pcall(M.annotate_message, opts, bufnr, ns, message)
+			local ok, result = pcall(M.annotate_message, opts, bufnr, ns_id, message)
 			if not ok then
 				vim.notify_once("failed to annotate message: " .. result, vim.log.levels.ERROR)
 			end
 		end
 		if opts.annotate.tag.enabled or opts.annotate.value.enabled then
 			for _, field in pairs(message:fields()) do
-				M.annotate_field(opts, bufnr, ns, message.lineno, field)
+				M.annotate_field(opts, bufnr, ns_id, message.lineno, field)
 			end
 		end
 		-- end

@@ -36,7 +36,7 @@ local consts = require("fix.consts")
 
 local M = {}
 
-local ns = vim.api.nvim_create_namespace("fix-protocol")
+local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 
 -- TODO: test
 -- TODO: document
@@ -82,7 +82,8 @@ local function register_autocmds()
 		group = vim.api.nvim_create_augroup("fix-decorate", { clear = true }),
 		callback = function(args)
 			if vim.bo[args.buf].filetype == "fix" then
-				annotate.annotate(M.opts, args.buf, ns)
+				print("ns_id", ns_id)
+				annotate.annotate(M.opts, args.buf, ns_id)
 			end
 		end,
 	})
@@ -90,7 +91,7 @@ local function register_autocmds()
 	vim.api.nvim_create_autocmd("FileType", {
 		pattern = "fix",
 		callback = function(args)
-			annotate.annotate(M.opts, args.buf, M.ns)
+			annotate.annotate(M.opts, args.buf, ns_id)
 		end,
 	})
 end
