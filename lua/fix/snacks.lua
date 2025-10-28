@@ -20,7 +20,7 @@ function M.open()
 			local seq_no = message:field(34).value
 
 			local text = string.format(
-				"#%d:%s:%s%s=%s:%s=%s",
+				"#%s:%s:%s%s=%s:%s=%s",
 				seq_no,
 				msg_type,
 				sender,

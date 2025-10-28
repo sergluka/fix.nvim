@@ -5,7 +5,7 @@ function M.default(message)
 	local msg_type_name = message:field(35).value_text or "Unknown"
 
 	local text = string.format(
-		"%s: %d: %s=>%s | %s",
+		"%s: %s: %s=>%s | %s",
 		message:field(52).value or "???",
 		message:field(34).value or "???",
 		message:field(49).value or "???",
