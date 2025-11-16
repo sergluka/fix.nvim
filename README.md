@@ -2,8 +2,6 @@
 
 A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/) messages
 
----
-
 ## Features
 
 - **Syntax highlighting** for FIX messages (via [tree-sitter-fix](https://github.com/sergluka/tree-sitter-fix))
@@ -13,15 +11,11 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
 - **SOH (`\x01`) character concealing** for readability
 - **Field picker** (optional, with [snacks.nvim](https://github.com/folke/snacks.nvim))
 
----
-
 ## Screenshots
 
 ![Annotated without title](./media/annotate-wo-title.png)
 ![Annotated](./media/annotate.png)
 ![Picker](./media/picker.png)
-
----
 
 ## Installation
 
@@ -43,8 +37,6 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
 }
 ```
 
----
-
 ## Usage
 
 | Command | Lua API | Description |
@@ -55,8 +47,6 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open Onixs tag info page in browser |
 | `:FIX yank field [--reg=<REGISTER>]` | `require("fix").yank_field(reg)` | Yank annotated field under cursor |
 | `:FIX yank message [--reg=<REGISTER>]` | `require("fix").yank_message(reg)` | Yank annotated message under cursor |
-
----
 
 ## Configuration
 
@@ -87,8 +77,6 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
   },
 }
 ```
-
----
 
 ## Keybindings
 
@@ -122,17 +110,15 @@ vim.keymap.set({ "n", "v" }, "]G", function() ts_move.goto_next_end("@comment") 
 vim.keymap.set({ "n", "v" }, "[G", function() ts_move.goto_previous_end("@comment") end, { desc = "fix: previous comment end", buffer = true })
 ```
 
----
+## Limitations
 
-## Known Issues
+- For now plugin supports tree-sitter master branch only
 
- Due to a [Neovim limitation](https://github.com/neovim/neovim/issues/16166), virtual text above the first line is not displayed, so the first message title may not be visible. Workarounds:
+- Due to a [Neovim limitation](https://github.com/neovim/neovim/issues/16166), virtual text above the first line is not displayed, so the first message title may not be visible. Workarounds:
 
-- Add an empty line at the beginning of the file
-- Press `C-b` to scroll to the top after opening
-- Use `annotate.message.position = "below"` to display the message title below the message
-
----
+  - Add an empty line at the beginning of the file
+  - Press `C-b` to scroll to the top after opening
+  - Use `annotate.message.position = "below"` to display the message title below the message
 
 ## Links
 
