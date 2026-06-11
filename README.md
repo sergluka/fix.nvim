@@ -116,8 +116,6 @@ vim.keymap.set({ "n", "v" }, "[G", function() ts_move.goto_previous_end("@commen
 
 ## Limitations
 
-- For now plugin supports tree-sitter master branch only
-
 - Due to a [Neovim limitation](https://github.com/neovim/neovim/issues/16166), virtual text above the first line is not displayed, so the first message title may not be visible. Workarounds:
 
   - Add an empty line at the beginning of the file
