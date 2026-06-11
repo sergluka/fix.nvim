@@ -33,7 +33,7 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
   opts = {
     -- Configuration options here
   },
-  build = ":TSUpdate fix",
+  build = { "rockspec", ":TSUpdate fix" },
 }
 ```
 
@@ -42,7 +42,7 @@ A Neovim plugin for viewing [FIX protocol](https://www.fixtrading.org/standards/
 | Command | Lua API | Description |
 |---------|--------------|-------------|
 | `:FIX --help` | | Show help |
-| `:FIX annotations [all, tag, value, message]` | `require("fix").annotate(scope)` | Toggle annotations |
+| `:FIX annotations [all, tag, value, message]` | `require("fix").annotate_toggle(scope)` | Toggle annotations |
 | `:FIX picker` | `require("fix.snacks").open()` | Show fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open Onixs tag info page in browser |
 | `:FIX yank field [--reg=<REGISTER>]` | `require("fix").yank_field(reg)` | Yank annotated field under cursor |
@@ -92,7 +92,11 @@ vim.keymap.set("n", "<localleader>yf", function() fix.yank_field("+") end, { des
 vim.keymap.set("n", "<localleader>yy", function() fix.yank_message("+") end, { desc = "fix: yank message", buffer = true })
 vim.keymap.set("n", "<localleader><localleader>", function() require("fix.snacks").open() end, { desc = "fix: browse tags", buffer = true })
 
-local ts_move = require("nvim-treesitter.textobjects.move")
+-- nvim-treesitter version-agnostic way
+local ok, ts_move = pcall(require, "nvim-treesitter-textobjects.move")
+if not ok then
+  ts_move = require("nvim-treesitter.textobjects.move")
+end
 
 vim.keymap.set({ "n", "v" }, "]]", function() ts_move.goto_next_start("@field") end, { desc = "fix: next field start", buffer = true })
 vim.keymap.set({ "n", "v" }, "[[", function() ts_move.goto_previous_start("@field") end, { desc = "fix: previous field start", buffer = true })
@@ -119,6 +123,31 @@ vim.keymap.set({ "n", "v" }, "[G", function() ts_move.goto_previous_end("@commen
   - Add an empty line at the beginning of the file
   - Press `C-b` to scroll to the top after opening
   - Use `annotate.message.position = "below"` to display the message title below the message
+
+## Development
+
+Integration tests run inside a Podman container. The image bakes Neovim 0.12.0, the `tree-sitter-fix` parser, and all Lua dependencies at pinned commit SHAs — there is no network I/O at test time.
+
+Requirements: Podman >= 5.x.
+
+```sh
+# Build image (first run only) and run the full suite.
+./bin/test-integration
+
+# Force a fresh image rebuild (after pin updates in Containerfile).
+./bin/test-integration --rebuild
+
+# Run a single spec file (resolves to tests/integration/test_<name>.lua).
+./bin/test-integration --filter annotate
+
+# Drop into an interactive nvim with a fixture pre-loaded.
+podman run --rm -it --entrypoint nvim \
+    -v "$PWD:/plugin:Z" \
+    localhost/fix-nvim-test:latest \
+    -u tests/integration/minimal_init.lua tests/integration/fixtures/4.4.fix
+```
+
+CI runs the same image via `.github/workflows/ci.yml`. Lint (`stylua`, `luacheck`) still runs on the host.
 
 ## Links
 

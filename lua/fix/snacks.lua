@@ -3,91 +3,90 @@ local document = require("fix.document")
 local M = {}
 
 function M.open()
-	local ok, snacks = pcall(require, "snacks")
-	if not ok then
-		print("Snacks is not installed.")
-		return
-	end
+    local ok, snacks = pcall(require, "snacks")
+    if not ok then
+        vim.notify("fix.nvim: snacks.nvim is not installed", vim.log.levels.WARN)
+        return
+    end
 
-	local items = {}
-	local message_idx = 0
-	document.iter_messages(0, function(message)
-		local file = vim.api.nvim_buf_get_name(0)
+    local items = {}
+    local message_idx = 0
+    document.iter_messages(0, function(message)
+        local file = vim.api.nvim_buf_get_name(0)
+        local msg_type = message:field(35).value_text
+        local sender = message:field(49).value
+        local seq_no = message:field(34).value
 
-		for _, field in pairs(message:list_fields()) do
-			local msg_type = message:field(35).value_text
-			local sender = message:field(49).value
-			local seq_no = message:field(34).value
+        for _, field in pairs(message:list_fields()) do
+            local text = string.format(
+                "#%s:%s:%s%s=%s:%s=%s",
+                seq_no,
+                msg_type,
+                sender,
+                field.tag,
+                field.value,
+                field.tag_text or "",
+                field.value_text or ""
+            )
+            -- assuming that message won't have more than 100,000 fields
+            local index = message_idx * 100000 + field.index
+            table.insert(items, {
+                index = index,
+                text = text,
+                message = message,
+                field = field,
+                lineno = message.lineno,
+                file = file,
+                pos = { message.lineno + 1, field.tag_start },
+                end_pos = { message.lineno + 1, field.value_end },
+            })
+        end
+        message_idx = message_idx + 1
+    end)
 
-			local text = string.format(
-				"#%s:%s:%s%s=%s:%s=%s",
-				seq_no,
-				msg_type,
-				sender,
-				field.tag,
-				field.value,
-				field.tag_text or "",
-				field.value_text or ""
-			)
-			-- assuming that message won't have more than 100,000 fields
-			local index = message_idx * 100000 + field.index
-			table.insert(items, {
-				index = index,
-				text = text,
-				message = message,
-				field = field,
-				lineno = message.lineno,
-				file = file,
-				pos = { message.lineno + 1, field.tag_start },
-				end_pos = { message.lineno + 1, field.value_end },
-			})
-		end
-		message_idx = message_idx + 1
-	end)
+    snacks.picker({
+        title = "FIX fields",
+        items = items,
 
-	snacks.picker({
-		title = "FIX fields",
-		items = items,
+        format = function(item, _)
+            local field = item.field
+            local message = item.message
+            local msg_type = message:field(35)
+            local sender = message:field(49).value
+            local seq_no = message:field(34).value
 
-		format = function(item, _)
-			local field = item.field
-			local message = item.message
-			local msg_type = message:field(35)
-			local sender = message:field(49).value
-			local seq_no = message:field(34).value
+            local ret = {}
+            ret[#ret + 1] = { string.format("#%s %s => %s ", seq_no, sender, msg_type.value_text), "Comment" }
 
-			local ret = {}
-			ret[#ret + 1] = { string.format("#%s %s => %s ", seq_no, sender, msg_type.value_text), "Comment" }
+            if field.tag_text then
+                ret[#ret + 1] = { string.format("%s(%d)", field.tag_text, field.tag), "Type" }
+            else
+                ret[#ret + 1] = { tostring(field.tag), "Type" }
+            end
 
-			if field.tag_text then
-				ret[#ret + 1] = { string.format("%s(%d)", field.tag_text, field.tag), "Type" }
-			else
-				ret[#ret + 1] = { tostring(field.tag), "Type" }
-			end
+            ret[#ret + 1] = { "=", "Operator" }
 
-			ret[#ret + 1] = { "=", "Operator" }
+            if field.value_text then
+                ret[#ret + 1] = { string.format("%s(%s)", field.value_text, field.value), "Label" }
+            else
+                ret[#ret + 1] = { field.value, "Label" }
+            end
 
-			if field.value_text then
-				ret[#ret + 1] = { string.format("%s(%s)", field.value_text, field.value), "Label" }
-			else
-				ret[#ret + 1] = { field.value, "Label" }
-			end
+            return ret
+        end,
 
-			return ret
-		end,
+        sort = {
+            fields = { "index" },
+        },
 
-		sort = {
-			fields = { "idx" },
-		},
-
-		confirm = function(picker, item)
-			picker:close()
-			if item then
-				local field = item.field ---@type Field
-				vim.api.nvim_win_set_cursor(0, { item.lineno + 1, field.tag_start })
-			end
-		end,
-	})
+        confirm = function(picker, item)
+            picker:close()
+            if item then
+                local field = item.field ---@type Field
+                vim.api.nvim_win_set_cursor(0, { item.lineno + 1, field.tag_start })
+            end
+        end,
+    })
 end
 
 return M

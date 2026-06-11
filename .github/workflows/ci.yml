@@ -17,31 +17,59 @@ jobs:
       - name: stylua
         uses: JohnnyMorganz/stylua-action@v4
         with:
-          version: 0.20.0
+          version: 2.3.0
           token: ${{ secrets.GITHUB_TOKEN }}
           args: --check .
 
       - name: luacheck
         uses: lunarmodules/luacheck@v1
 
-  test:
-    name: tests
+  integration:
+    name: integration tests
     runs-on: ubuntu-latest
     steps:
-      - name: checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - uses: leafo/gh-actions-lua@v12
-        with:
-          luaVersion: "5.1"
-
-      - name: install luarocks
-        uses: leafo/gh-actions-luarocks@v6
-
-      - name: install deps
+      - name: Verify podman is available
         run: |
-          luarocks install xml2lua 
-          luarocks install busted
+          if ! command -v podman >/dev/null 2>&1; then
+            sudo apt-get update && sudo apt-get install -y podman
+          fi
+          podman --version
 
-      - name: run tests
-        run: busted --verbose
+      - name: Cache built image
+        id: image-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/podman-image.tar
+          key: podman-image-${{ hashFiles('Containerfile') }}
+
+      - name: Load cached image
+        if: steps.image-cache.outputs.cache-hit == 'true'
+        run: podman load -i /tmp/podman-image.tar
+
+      - name: Build image (cache miss)
+        if: steps.image-cache.outputs.cache-hit != 'true'
+        run: |
+          podman build -t localhost/fix-nvim-test:latest -f Containerfile .
+          podman save -o /tmp/podman-image.tar localhost/fix-nvim-test:latest
+
+      - name: Run full suite via wrapper
+        run: ./bin/test-integration
+
+      - name: Run each spec in isolation (--filter smoke)
+        run: |
+          set -e
+          shopt -s nullglob
+          specs=(tests/integration/test_*.lua)
+          if (( ${#specs[@]} == 0 )); then
+            echo "ERROR: no tests/integration/test_*.lua files found" >&2
+            exit 1
+          fi
+          for path in "${specs[@]}"; do
+            name="${path#tests/integration/test_}"
+            name="${name%.lua}"
+            echo "::group::filter ${name}"
+            ./bin/test-integration --filter "${name}"
+            echo "::endgroup::"
+          done

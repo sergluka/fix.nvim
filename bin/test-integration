@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# Build (on demand) and run the fix.nvim integration test suite in Podman.
+set -euo pipefail
+
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+IMAGE="${FIX_NVIM_TEST_IMAGE:-localhost/fix-nvim-test:latest}"
+FILTER=""
+REBUILD=0
+
+usage() {
+    echo "Usage: $0 [--rebuild] [--filter <name>] [-- <extra nvim args>]"
+    echo "  --filter NAME   run only tests/integration/test_<NAME>.lua"
+    echo "  --rebuild       force a fresh image build"
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --rebuild) REBUILD=1; shift ;;
+        --filter)
+            if [[ $# -lt 2 ]]; then
+                echo "ERROR: --filter requires a value" >&2
+                usage >&2
+                exit 2
+            fi
+            FILTER="$2"
+            shift 2
+            ;;
+        --) shift; break ;;
+        -h|--help) usage; exit 0 ;;
+        *) break ;;
+    esac
+done
+
+if [[ $REBUILD -eq 1 ]] || ! podman image exists "$IMAGE"; then
+    podman build -t "$IMAGE" -f "$REPO/Containerfile" "$REPO"
+fi
+
+env_args=()
+[[ -n "$FILTER" ]] && env_args+=("-e" "FIX_NVIM_TEST_FILTER=$FILTER")
+
+if [[ $# -eq 0 ]]; then
+    exec podman run --rm "${env_args[@]}" \
+        -v "$REPO:/plugin:Z" \
+        "$IMAGE"
+else
+    exec podman run --rm -it "${env_args[@]}" \
+        --entrypoint nvim \
+        -v "$REPO:/plugin:Z" \
+        "$IMAGE" \
+        --headless -u tests/integration/minimal_init.lua "$@"
+fi

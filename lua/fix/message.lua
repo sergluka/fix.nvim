@@ -2,45 +2,58 @@
 --- @field version FixVersion
 --- @field lineno number
 --- @field _fields { [number]: Field }
+--- @field extmark_title_id? number
 local M = {}
 
 function M.new(version, lineno, fields)
-	local self = {
-		version = version,
-		lineno = lineno,
-		_fields = fields,
-	}
-	setmetatable(self, { __index = M })
-	return self
+    local self = {
+        version = version,
+        lineno = lineno,
+        _fields = fields,
+        extmark_title_id = nil,
+    }
+    setmetatable(self, { __index = M })
+    return self
 end
 
---- Kotlin-style getter
 ---@param tag number
 ---@return Field
 function M:field(tag)
-	local field = self._fields[tag]
-	if field == nil then
-		return require("fix.field").empty()
-	end
+    local field = self._fields[tag]
+    if field == nil then
+        return require("fix.field").empty()
+    end
 
-	return field
+    return field
 end
 
 --- @return { [number]: Field }
 function M:fields()
-	return self._fields
+    return self._fields
 end
 
 --- @return Field[]
 function M:list_fields()
-	local fields = {} ---@type Field[]
-	for _, field in pairs(self._fields) do
-		table.insert(fields, field)
-	end
-	table.sort(fields, function(lhs, rhs)
-		return lhs.index < rhs.index
-	end)
-	return fields
+    local fields = {} ---@type Field[]
+    for _, field in pairs(self._fields) do
+        table.insert(fields, field)
+    end
+    table.sort(fields, function(lhs, rhs)
+        return lhs.index < rhs.index
+    end)
+    return fields
+end
+
+---@param bufnr number
+---@param ns_id number
+function M:clear(ns_id, bufnr)
+    for _, field in pairs(self._fields) do
+        field:clear(ns_id, bufnr)
+    end
+    if self.extmark_title_id then
+        vim.api.nvim_buf_del_extmark(bufnr, ns_id, self.extmark_title_id)
+        self.extmark_title_id = nil
+    end
 end
 
 return M
