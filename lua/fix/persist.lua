@@ -3,7 +3,7 @@ local Log = require("fix.log")
 
 local M = {}
 
-local FORMAT_VERSION = 1
+local FORMAT_VERSION = 2
 
 -- Set on the first filesystem failure; persistence stays off for the session.
 M._disabled = false
@@ -80,6 +80,7 @@ function M.load_into_cache(buf)
         or type(data) ~= "table"
         or data.format_version ~= FORMAT_VERSION
         or data.dict_fingerprint ~= M.fingerprint()
+        or data.fallback_version ~= opts().fallback_version
         or type(data.entries) ~= "table"
     then
         Log.warn("discarding stale or corrupt cache file: " .. path)
@@ -145,6 +146,7 @@ function M.save(buf, keys, sync)
     local ok_enc, blob = pcall(vim.mpack.encode, {
         format_version = FORMAT_VERSION,
         dict_fingerprint = M.fingerprint(),
+        fallback_version = opts().fallback_version,
         entries = entries,
     })
     if not ok_enc then

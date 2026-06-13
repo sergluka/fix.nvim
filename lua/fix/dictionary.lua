@@ -3,7 +3,7 @@ local xml2lua = require("xml2lua")
 ---@class M
 ---@field _cache table<string, Dictionary>
 
----@alias FixMessageType integer -- XXX: check
+---@alias FixMessageType integer
 ---@alias FieldsDef  { [number]: FieldDef }
 
 ---@class MessageDef
@@ -26,6 +26,35 @@ local xml2lua = require("xml2lua")
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>
 local M = {}
+
+local aliases = {
+    ["FIXT.1.1"] = "FIX.5.0SP2",
+}
+
+local function module_dir()
+    return debug.getinfo(1, "S").source:sub(2):match("(.*/)")
+end
+
+local function base_path(version)
+    return module_dir() .. "../../xml/" .. version .. "/Base/"
+end
+
+---@param version string
+---@return string
+function M.resolve_version(version)
+    return aliases[version] or version
+end
+
+---@param version string
+---@return boolean
+function M.has_version(version)
+    if type(version) ~= "string" or version == "" then
+        return false
+    end
+
+    local dir = base_path(M.resolve_version(version))
+    return vim.uv.fs_stat(dir .. "Fields.xml") ~= nil and vim.uv.fs_stat(dir .. "Enums.xml") ~= nil
+end
 
 local function parse(dir, file)
     local xml = xml2lua.loadFile(dir .. file)
@@ -50,7 +79,7 @@ local function load_fields(dir, file)
         dict[tag] = {
             tag = tag,
             name = value.Name,
-            type = value.Type, -- TODO: convert and use
+            type = value.Type,
             description = value.Description,
         }
     end
@@ -83,13 +112,16 @@ function M.new(fields, enums)
 end
 
 ---@param version string
----@return Dictionary
+---@return Dictionary?
 function M.load(version)
     -- TODO: consider using 1128 (ApplVerID) and 1137 (DefaultApplVerID) to reference the correct SP.
     -- It may be required for validation in the future.
     -- For now, we default to using SP2, where all fields are defined.
-    if version == "FIXT.1.1" then
-        version = "FIX.5.0SP2"
+    version = M.resolve_version(version)
+
+    if not M.has_version(version) then
+        vim.notify_once("fix.nvim: FIX dictionary not found for version " .. tostring(version), vim.log.levels.WARN)
+        return nil
     end
 
     M._cache = M._cache or {}
@@ -99,10 +131,9 @@ function M.load(version)
 
     vim.notify("fix.nvim: Loading FIX dictionary for version " .. version, vim.log.levels.DEBUG)
 
-    local module_dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
-    local base_path = module_dir .. "../../xml/" .. version .. "/Base/"
-    local fields = load_fields(base_path, "Fields.xml")
-    local enums = load_enums(base_path, "Enums.xml")
+    local dir = base_path(version)
+    local fields = load_fields(dir, "Fields.xml")
+    local enums = load_enums(dir, "Enums.xml")
     local dict = M.new(fields, enums)
     M._cache[version] = dict
 

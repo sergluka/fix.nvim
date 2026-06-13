@@ -76,6 +76,11 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 
 ```lua
 {
+  -- Bundled dictionary version used when BeginString (tag 8) is missing or unknown.
+  -- Examples: "FIX.4.0", "FIX.4.4", "FIX.5.0SP2", "FIXT.1.1".
+  -- "FIXT.1.1" resolves through "FIX.5.0SP2".
+  fallback_version = "FIX.4.4",
+
   -- Filetype detection rules passed to vim.filetype.add().
   ft = {
     extensions = { "fix", "fixlog" },

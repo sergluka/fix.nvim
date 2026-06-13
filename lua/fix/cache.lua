@@ -1,5 +1,5 @@
 ---@class FixSemantic
----@field version FixVersion
+---@field version string
 ---@field fields Field[]   -- ordered by index; duplicates are adjacent entries
 
 ---@class FixRenderMark

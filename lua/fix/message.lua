@@ -1,7 +1,7 @@
 local Field = require("fix.field")
 
 --- @class Message
---- @field version FixVersion
+--- @field version string
 --- @field lineno number
 --- @field _fields { [number]: Field }
 local M = {}

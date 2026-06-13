@@ -17,6 +17,12 @@ local versions = {
     ["FIXT.1.1"] = Consts.FixVersion.FIX_5_0,
 }
 
+---@return string
+local function fallback_version()
+    local ok, fix = pcall(require, "fix")
+    return ok and fix.opts and fix.opts.fallback_version or Consts.FixVersion.FIX_4_4
+end
+
 ---@param fields Field[]
 ---@return FixVersion?
 local function get_version(fields)
@@ -112,9 +118,8 @@ local function semantic_from_node(buf, message_node)
 
     local version = get_version(fields)
     if not version then
-        -- TODO: make configurable?
-        vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
-        version = Consts.FixVersion.FIX_4_0
+        version = fallback_version()
+        vim.notify_once("Cannot get FIX version, fallback to " .. version, vim.log.levels.WARN)
     end
 
     local semantic = { version = version, fields = fields }

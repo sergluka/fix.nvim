@@ -20,7 +20,8 @@ local T = MiniTest.new_set({
 
 local Dictionary = require("fix.dictionary")
 
-local versions = { "FIX.4.0", "FIX.4.1", "FIX.4.2", "FIX.4.3", "FIX.4.4", "FIXT.1.1" }
+local versions =
+    { "FIX.4.0", "FIX.4.1", "FIX.4.2", "FIX.4.3", "FIX.4.4", "FIX.5.0", "FIX.5.0SP1", "FIX.5.0SP2", "FIXT.1.1" }
 
 T["load version"] = MiniTest.new_set({
     parametrize = vim.tbl_map(function(v)
@@ -38,6 +39,12 @@ T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
     local fixt = Dictionary.load("FIXT.1.1")
     local sp2 = Dictionary.load("FIX.5.0SP2")
     MiniTest.expect.equality(rawequal(fixt, sp2), true)
+end
+
+T["has_version checks bundled dictionaries and aliases"] = function()
+    MiniTest.expect.equality(Dictionary.has_version("FIX.5.0SP2"), true)
+    MiniTest.expect.equality(Dictionary.has_version("FIXT.1.1"), true)
+    MiniTest.expect.equality(Dictionary.has_version("FIX.9.9"), false)
 end
 
 T["second load returns same instance"] = function()

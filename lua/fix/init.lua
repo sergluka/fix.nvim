@@ -39,9 +39,11 @@
 ---@field render.debounce_ms? number
 ---@field render.lines_per_batch? number
 ---@field render.viewport_margin? number
+---@field fallback_version? string
 
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
+local Dictionary = require("fix.dictionary")
 local Document = require("fix.document")
 local MessageFormatter = require("fix.formatters.message")
 local Persist = require("fix.persist")
@@ -52,9 +54,8 @@ local Yank = require("fix.yank")
 
 local M = {}
 
--- TODO: test
--- TODO: document
 local default_settings = {
+    fallback_version = Consts.FixVersion.FIX_4_4,
     ft = {
         extensions = { "fix", "fixlog" },
         pattern = { ".*%.fix.txt" },
@@ -87,6 +88,13 @@ local default_settings = {
         viewport_margin = 50,
     },
 }
+
+---@param opts FixOpts
+local function validate_opts(opts)
+    if not Dictionary.has_version(opts.fallback_version) then
+        error("fix.nvim: fallback_version has no bundled dictionary: " .. tostring(opts.fallback_version), 2)
+    end
+end
 
 local function register_filetype()
     local patterns = {}
@@ -151,15 +159,23 @@ end
 
 ---@param opts FixOpts
 function M.setup(opts)
-    local is_resetup = M.opts ~= nil
-    M.opts = vim.tbl_deep_extend("force", default_settings, opts or {})
+    local prev_opts = M.opts
+    local next_opts = vim.tbl_deep_extend("force", default_settings, opts or {})
+    validate_opts(next_opts)
+
+    local is_resetup = prev_opts ~= nil
+    M.opts = next_opts
     M.opts_initial = vim.deepcopy(M.opts)
 
     register_filetype()
     register_autocmds()
 
     if is_resetup then
-        Cache.drop_render()
+        if prev_opts.fallback_version == M.opts.fallback_version then
+            Cache.drop_render()
+        else
+            Cache.clear()
+        end
         Render.rerender_all()
     end
 end
@@ -216,6 +232,9 @@ function M.browse_tag_online()
         [Consts.FixVersion.FIX_4_3] = "4.3",
         [Consts.FixVersion.FIX_4_4] = "4.4",
         [Consts.FixVersion.FIX_5_0] = "5.0",
+        ["FIX.5.0"] = "5.0",
+        ["FIX.5.0SP1"] = "5.0",
+        ["FIX.5.0SP2"] = "5.0",
     }
 
     -- TODO: support custom URLs

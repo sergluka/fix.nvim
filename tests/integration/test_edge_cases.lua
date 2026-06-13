@@ -7,13 +7,50 @@ local nvim = H.nvim
 T["missing tag 8 emits primary and fallback notifications"] = function()
     H.load_fixture(nvim(), "malformed-missing-tag8.fix", { expect_extmarks = false, timeout_ms = 200 })
     H.expect_notified(nvim(), "Missing BeginString %(tag 8%)")
-    H.expect_notified(nvim(), "Cannot get FIX version, fallback to FIX%.4%.0")
+    H.expect_notified(nvim(), "Cannot get FIX version, fallback to FIX%.4%.4")
 end
 
 T["unknown BeginString emits primary and fallback notifications"] = function()
     H.load_fixture(nvim(), "malformed-unknown-version.fix", { expect_extmarks = false, timeout_ms = 200 })
     H.expect_notified(nvim(), "Unknown BeginString %(tag 8%): FIX%.9%.9")
+    H.expect_notified(nvim(), "Cannot get FIX version, fallback to FIX%.4%.4")
+end
+
+T["configured fallback version is used when BeginString is missing"] = function()
+    nvim().lua([[require("fix").setup({ fallback_version = "FIX.4.0" })]])
+    H.load_fixture(nvim(), "malformed-missing-tag8.fix", { expect_extmarks = false })
     H.expect_notified(nvim(), "Cannot get FIX version, fallback to FIX%.4%.0")
+
+    local version = nvim().lua_get([[
+        (function()
+            local message = require("fix.document").build_line(0, 1)
+            return message and message.version
+        end)()
+    ]])
+    MiniTest.expect.equality(version, "FIX.4.0")
+end
+
+T["configured fallback accepts any bundled dictionary version"] = function()
+    nvim().lua([[require("fix").setup({ fallback_version = "FIX.5.0SP2" })]])
+    H.load_fixture(nvim(), "malformed-missing-tag8.fix", { expect_extmarks = false })
+    H.expect_notified(nvim(), "Cannot get FIX version, fallback to FIX%.5%.0SP2")
+
+    local version = nvim().lua_get([[
+        (function()
+            local message = require("fix.document").build_line(0, 1)
+            return message and message.version
+        end)()
+    ]])
+    MiniTest.expect.equality(version, "FIX.5.0SP2")
+end
+
+T["invalid fallback version is rejected"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({ fallback_version = "FIX.9.9" })
+        end))
+    ]])
+    MiniTest.expect.equality(err:find("fallback_version", 1, true) ~= nil, true)
 end
 
 T["duplicate tags render both extmarks"] = function()
