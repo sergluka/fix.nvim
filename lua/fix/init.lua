@@ -33,7 +33,8 @@
 ---@field cache? table
 ---@field cache.persist? table
 ---@field cache.persist.enabled? boolean
----@field cache.persist.max_files? number
+---@field cache.persist.max_files? number|false
+---@field cache.persist.max_bytes? number|false
 ---@field cache.persist.dir? string
 ---@field render? table
 ---@field render.debounce_ms? number
@@ -79,6 +80,7 @@ local default_settings = {
         persist = {
             enabled = true,
             max_files = 20,
+            max_bytes = 100 * 1024 * 1024,
             dir = nil, -- defaults to stdpath("cache") .. "/fix.nvim" at runtime
         },
     },
@@ -93,6 +95,25 @@ local default_settings = {
 local function validate_opts(opts)
     if not Dictionary.has_version(opts.fallback_version) then
         error("fix.nvim: fallback_version has no bundled dictionary: " .. tostring(opts.fallback_version), 2)
+    end
+
+    local persist = opts.cache.persist
+    local function validate_limit(name, value, integer)
+        if value == false then
+            return
+        end
+        local valid_number = type(value) == "number" and value > 0 and value == value and value < math.huge
+        if not valid_number or (integer and value % 1 ~= 0) then
+            local kind = integer and "positive integer" or "positive number"
+            error("fix.nvim: cache.persist." .. name .. " must be false or a " .. kind, 2)
+        end
+    end
+
+    validate_limit("max_files", persist.max_files, true)
+    validate_limit("max_bytes", persist.max_bytes, false)
+
+    if persist.enabled and persist.max_files == false and persist.max_bytes == false then
+        error("fix.nvim: cache.persist.max_files and max_bytes cannot both be false when persistence is enabled", 2)
     end
 end
 

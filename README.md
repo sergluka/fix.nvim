@@ -106,7 +106,8 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
   cache = {
     persist = {
       enabled = true,
-      max_files = 20,
+      max_files = 20, -- set false to disable the file-count limit
+      max_bytes = 100 * 1024 * 1024, -- set false to disable the total-size limit
       dir = nil, -- defaults to stdpath("cache") .. "/fix.nvim"
     },
   },
@@ -126,7 +127,9 @@ external state can produce stale annotations.
 
 The persistent cache lives at `stdpath("cache")/fix.nvim` unless
 `cache.persist.dir` is set. Set `cache.persist.enabled = false` to keep all
-cache data in memory only.
+cache data in memory only. Cache rotation deletes the oldest `.mpack` files
+until both enabled limits, `max_files` and `max_bytes`, are satisfied. When
+persistence is enabled, at least one rotation limit must remain enabled.
 
 Rendering is viewport-first. The visible region, plus `viewport_margin` lines
 above and below it, is annotated immediately after the edit debounce. The rest

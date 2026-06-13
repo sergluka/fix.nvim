@@ -56,8 +56,6 @@ function M.fingerprint()
     return _fingerprint
 end
 
--- TODO: rotation bounds file count, not per-file size; huge log files mean a
--- multi-MB sync mpack decode on every BufReadPost.
 ---@param buf number
 function M.load_into_cache(buf)
     if not enabled() then
@@ -96,35 +94,54 @@ local function disable(msg)
     vim.notify_once("fix.nvim: cache persistence disabled: " .. msg, vim.log.levels.WARN)
 end
 
---- Delete files beyond max_files, oldest mtime first. Main loop only.
+--- Delete oldest files until enabled count and byte limits are satisfied.
+--- Main loop only.
 function M.rotate()
     local dir = cache_dir()
-    local max = opts().cache.persist.max_files
+    local persist = opts().cache.persist
+    local max_files = persist.max_files
+    local max_bytes = persist.max_bytes
     local scanner = vim.uv.fs_scandir(dir)
     if not scanner then
         return
     end
     local files = {}
+    local total_bytes = 0
     while true do
         local name, kind = vim.uv.fs_scandir_next(scanner)
         if not name then
             break
         end
         if kind == "file" and name:match("%.mpack$") then
-            local stat = vim.uv.fs_stat(dir .. "/" .. name)
+            local path = dir .. "/" .. name
+            local stat = vim.uv.fs_stat(path)
             if stat then
-                files[#files + 1] = { name = name, mtime = stat.mtime.sec }
+                local size = stat.size or 0
+                files[#files + 1] = { path = path, mtime = stat.mtime.sec, size = size }
+                total_bytes = total_bytes + size
             end
         end
     end
-    if #files <= max then
+
+    local count_limit_enabled = max_files ~= false
+    local byte_limit_enabled = max_bytes ~= false
+    if (not count_limit_enabled or #files <= max_files) and (not byte_limit_enabled or total_bytes <= max_bytes) then
         return
     end
+
     table.sort(files, function(a, b)
         return a.mtime < b.mtime
     end)
-    for i = 1, #files - max do
-        vim.uv.fs_unlink(dir .. "/" .. files[i].name, function() end)
+    local removed = 0
+    for _, file in ipairs(files) do
+        local count_over = count_limit_enabled and (#files - removed > max_files)
+        local bytes_over = byte_limit_enabled and (total_bytes > max_bytes)
+        if not count_over and not bytes_over then
+            break
+        end
+        removed = removed + 1
+        total_bytes = total_bytes - file.size
+        vim.uv.fs_unlink(file.path, function() end)
     end
 end
 

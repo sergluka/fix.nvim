@@ -13,6 +13,20 @@ local function cache_files(nvim)
     return nvim.lua_get([[vim.fn.globpath(_G._persist_dir, "*.mpack", false, true)]])
 end
 
+local function cache_names(nvim)
+    return nvim.lua_get([[
+        (function()
+            local files = vim.fn.globpath(_G._persist_dir, "*.mpack", false, true)
+            local names = {}
+            for _, path in ipairs(files) do
+                names[#names + 1] = vim.fn.fnamemodify(path, ":t")
+            end
+            table.sort(names)
+            return names
+        end)()
+    ]])
+end
+
 T["persist"] = MiniTest.new_set()
 
 T["persist"]["writes a cache file after warm-up"] = function()
@@ -164,7 +178,7 @@ T["persist"]["rotation keeps max_files newest"] = function()
     local nvim = Helpers.nvim()
     nvim.lua([[
         _G._persist_dir = vim.fn.tempname()
-        require("fix").setup({ cache = { persist = { dir = _G._persist_dir, max_files = 2 } } })
+        require("fix").setup({ cache = { persist = { dir = _G._persist_dir, max_files = 2, max_bytes = false } } })
         -- Read the first non-empty line (fixture starts with a blank line).
         local f = io.open("tests/integration/fixtures/4.4.fix", "r")
         local line = ""
@@ -197,6 +211,76 @@ T["persist"]["rotation keeps max_files newest"] = function()
     end
     local ok = Helpers.wait_for(nvim, [[#vim.fn.globpath(_G._persist_dir, "*.mpack", false, true) == 2]], 5000)
     MiniTest.expect.equality(ok, true)
+end
+
+T["persist"]["rotation keeps total size under max_bytes"] = function()
+    local nvim = Helpers.nvim()
+    nvim.lua([[
+        _G._persist_dir = vim.fn.tempname()
+        require("fix").setup({ cache = { persist = { dir = _G._persist_dir, max_files = false, max_bytes = 10 } } })
+        vim.fn.mkdir(_G._persist_dir, "p")
+
+        local function write_cache(name, size, mtime)
+            local path = _G._persist_dir .. "/" .. name .. ".mpack"
+            local f = assert(io.open(path, "wb"))
+            f:write(string.rep(name:sub(1, 1), size))
+            f:close()
+            local ok, err = vim.uv.fs_utime(path, mtime, mtime)
+            assert(ok, err)
+        end
+
+        write_cache("old", 6, 100)
+        write_cache("middle", 6, 200)
+        write_cache("new", 6, 300)
+        require("fix.persist").rotate()
+    ]])
+    local ok = Helpers.wait_for(nvim, [[#vim.fn.globpath(_G._persist_dir, "*.mpack", false, true) == 1]], 3000)
+    MiniTest.expect.equality(ok, true)
+    MiniTest.expect.equality(cache_names(nvim), { "new.mpack" })
+end
+
+T["persist"]["rotation deletes a single file over max_bytes"] = function()
+    local nvim = Helpers.nvim()
+    nvim.lua([[
+        _G._persist_dir = vim.fn.tempname()
+        require("fix").setup({ cache = { persist = { dir = _G._persist_dir, max_files = false, max_bytes = 5 } } })
+        vim.fn.mkdir(_G._persist_dir, "p")
+
+        local path = _G._persist_dir .. "/oversized.mpack"
+        local f = assert(io.open(path, "wb"))
+        f:write(string.rep("x", 6))
+        f:close()
+        require("fix.persist").rotate()
+    ]])
+    local ok = Helpers.wait_for(nvim, [[#vim.fn.globpath(_G._persist_dir, "*.mpack", false, true) == 0]], 3000)
+    MiniTest.expect.equality(ok, true)
+end
+
+T["persist"]["invalid rotation limits are rejected"] = function()
+    local nvim = Helpers.nvim()
+    local errors = nvim.lua_get([[
+        (function()
+            local cases = {
+                max_files_zero = { cache = { persist = { max_files = 0 } } },
+                max_files_fraction = { cache = { persist = { max_files = 1.5 } } },
+                max_bytes_zero = { cache = { persist = { max_bytes = 0 } } },
+                both_false = { cache = { persist = { max_files = false, max_bytes = false } } },
+            }
+            local out = {}
+            for name, opts in pairs(cases) do
+                local ok, err = pcall(function()
+                    require("fix").setup(opts)
+                end)
+                out[name] = ok and "" or tostring(err)
+            end
+            return out
+        end)()
+    ]])
+
+    MiniTest.expect.equality(errors.max_files_zero:find("max_files", 1, true) ~= nil, true)
+    MiniTest.expect.equality(errors.max_files_fraction:find("max_files", 1, true) ~= nil, true)
+    MiniTest.expect.equality(errors.max_bytes_zero:find("max_bytes", 1, true) ~= nil, true)
+    MiniTest.expect.equality(errors.both_false:find("cannot both be false", 1, true) ~= nil, true)
 end
 
 return T
