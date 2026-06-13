@@ -79,6 +79,13 @@ local function register_commands()
         end
     end)
 
+    local cache_parser = top_subparser:add_parser({ name = "cache", help = "Cache maintenance" })
+    local cache_subparser = cache_parser:add_subparsers({ destination = "cache_command" })
+    local cache_clear = cache_subparser:add_parser({ name = "clear", help = "Drop cached annotations for this file" })
+    cache_clear:set_execute(function()
+        fix.cache_clear()
+    end)
+
     Cmdparse.create_user_command(parser)
 end
 

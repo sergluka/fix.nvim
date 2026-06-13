@@ -29,23 +29,27 @@ local STUB_INSTALL = [[
 	}
 ]]
 
-function M.new_nvim()
+function M.new_nvim(opts)
+    opts = opts or {}
     local nvim = MiniTest.new_child_neovim()
     nvim.start(nvim_ARGS)
     nvim.o.lines = 30
     nvim.o.columns = 100
     nvim.lua(STUB_INSTALL)
+    if opts.real_picker then
+        nvim.lua([[package.loaded["fix.snacks"] = nil]])
+    end
     return nvim
 end
 
 --- Returns a MiniTest set whose pre_case / post_case lifecycle spawns and
 --- tears down a fresh nvim Neovim, stashed in the module-local _nvim. Use
 --- together with M.nvim() inside cases.
-function M.new_test_set()
+function M.new_test_set(opts)
     return MiniTest.new_set({
         hooks = {
             pre_case = function()
-                _nvim = M.new_nvim()
+                _nvim = M.new_nvim(opts)
             end,
             post_case = function()
                 _nvim.stop()
@@ -71,30 +75,31 @@ function M.sleep(nvim, ms)
     nvim.lua(string.format([[vim.wait(%d, function() return false end, 25)]], ms))
 end
 
+--- Wait until the render scheduler is idle (warm-up done, no pending edits).
+function M.wait_annotated(nvim, timeout_ms)
+    local ok = M.wait_for(nvim, [[require("fix.render").is_idle(vim.api.nvim_get_current_buf())]], timeout_ms or 5000)
+    MiniTest.expect.equality(ok, true)
+end
+
 --- Edit a fixture file. Behaviour depends on opts.expect_extmarks:
----   true  (default): wait until at least one extmark exists; assert on timeout.
----   false: still wait `timeout_ms` for any deferred autocmd side-effects
----          (vim.notify, ftplugin settings) to flush.
+---   true  (default): wait for the render scheduler to go idle, then assert
+---          at least one extmark exists.
+---   false: still wait for idle (or `timeout_ms` for non-fix buffers) for any
+---          deferred side-effects (vim.notify, ftplugin settings) to flush.
 function M.load_fixture(nvim, name, opts)
     opts = opts or {}
     local expect = opts.expect_extmarks
     if expect == nil then
         expect = true
     end
-    local timeout = opts.timeout_ms or 500
     nvim.cmd("edit tests/integration/fixtures/" .. name)
-    if expect then
-        local ok = M.wait_for(
-            nvim,
-            [[(function()
-				local ns = vim.api.nvim_create_namespace("fix-protocol")
-				return #vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}) > 0
-			end)()]],
-            timeout
-        )
-        MiniTest.expect.equality(ok, true)
+    if nvim.lua_get("vim.bo.filetype") == "fix" then
+        M.wait_annotated(nvim, opts.timeout_ms or 5000)
     else
-        M.sleep(nvim, timeout)
+        M.sleep(nvim, opts.timeout_ms or 500)
+    end
+    if expect then
+        MiniTest.expect.equality(#M.get_extmarks(nvim) > 0, true)
     end
 end
 

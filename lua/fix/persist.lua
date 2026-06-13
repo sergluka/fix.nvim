@@ -1,0 +1,223 @@
+local Cache = require("fix.cache")
+local Log = require("fix.log")
+
+local M = {}
+
+local FORMAT_VERSION = 1
+
+-- Set on the first filesystem failure; persistence stays off for the session.
+M._disabled = false
+
+local function opts()
+    return require("fix").opts
+end
+
+local function cache_dir()
+    return opts().cache.persist.dir or (vim.fn.stdpath("cache") .. "/fix.nvim")
+end
+
+local function enabled()
+    return opts().cache.persist.enabled and not M._disabled
+end
+
+--- Cache file path for a buffer; nil for unnamed buffers.
+---@param buf number
+---@return string|nil
+function M.path_for(buf)
+    local name = vim.api.nvim_buf_get_name(buf)
+    if name == "" then
+        return nil
+    end
+    return cache_dir() .. "/" .. vim.fn.sha256(name):sub(1, 32) .. ".mpack"
+end
+
+-- Fingerprint of the vendored dictionaries: any change to the XML data must
+-- invalidate persisted entries (decoded names come from those files);
+-- format_version alone only covers the cache schema.
+local _fingerprint
+function M.fingerprint()
+    if _fingerprint then
+        return _fingerprint
+    end
+    local source = debug.getinfo(1, "S").source:sub(2)
+    local root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
+    local parts = {}
+    for _, xml in ipairs(vim.fn.globpath(root .. "/xml", "**/Base/*.xml", false, true)) do
+        local stat = vim.uv.fs_stat(xml)
+        if stat then
+            parts[#parts + 1] = string.format("%s:%d:%d", xml:sub(#root + 2), stat.mtime.sec, stat.size)
+        end
+    end
+    table.sort(parts)
+    if #parts == 0 then
+        Log.warn("no dictionaries found for fingerprint")
+    end
+    _fingerprint = vim.fn.sha256(table.concat(parts, ";")):sub(1, 16)
+    return _fingerprint
+end
+
+-- TODO: rotation bounds file count, not per-file size; huge log files mean a
+-- multi-MB sync mpack decode on every BufReadPost.
+---@param buf number
+function M.load_into_cache(buf)
+    if not enabled() then
+        return
+    end
+    local path = M.path_for(buf)
+    if not path then
+        return
+    end
+    local f = io.open(path, "rb")
+    if not f then
+        return
+    end
+    local blob = f:read("*a")
+    f:close()
+
+    local ok, data = pcall(vim.mpack.decode, blob)
+    if
+        not ok
+        or type(data) ~= "table"
+        or data.format_version ~= FORMAT_VERSION
+        or data.dict_fingerprint ~= M.fingerprint()
+        or type(data.entries) ~= "table"
+    then
+        Log.warn("discarding stale or corrupt cache file: " .. path)
+        return
+    end
+    Cache.merge(data.entries)
+end
+
+local function disable(msg)
+    M._disabled = true
+    local full = msg .. " — persistence disabled for this session"
+    Log.warn(full)
+    vim.notify_once("fix.nvim: cache persistence disabled: " .. msg, vim.log.levels.WARN)
+end
+
+--- Delete files beyond max_files, oldest mtime first. Main loop only.
+function M.rotate()
+    local dir = cache_dir()
+    local max = opts().cache.persist.max_files
+    local scanner = vim.uv.fs_scandir(dir)
+    if not scanner then
+        return
+    end
+    local files = {}
+    while true do
+        local name, kind = vim.uv.fs_scandir_next(scanner)
+        if not name then
+            break
+        end
+        if kind == "file" and name:match("%.mpack$") then
+            local stat = vim.uv.fs_stat(dir .. "/" .. name)
+            if stat then
+                files[#files + 1] = { name = name, mtime = stat.mtime.sec }
+            end
+        end
+    end
+    if #files <= max then
+        return
+    end
+    table.sort(files, function(a, b)
+        return a.mtime < b.mtime
+    end)
+    for i = 1, #files - max do
+        vim.uv.fs_unlink(dir .. "/" .. files[i].name, function() end)
+    end
+end
+
+---@param buf number
+---@param keys table<string, boolean>
+---@param sync boolean|nil  -- sync write for VimLeavePre (async would be lost)
+function M.save(buf, keys, sync)
+    if not enabled() then
+        return
+    end
+    local path = M.path_for(buf)
+    if not path then
+        return
+    end
+    local entries = Cache.collect(keys)
+    if vim.tbl_isempty(entries) then
+        return
+    end
+    local ok_enc, blob = pcall(vim.mpack.encode, {
+        format_version = FORMAT_VERSION,
+        dict_fingerprint = M.fingerprint(),
+        entries = entries,
+    })
+    if not ok_enc then
+        Log.warn("failed to encode cache: " .. tostring(blob))
+        return
+    end
+
+    local ok_mkdir = pcall(vim.fn.mkdir, cache_dir(), "p")
+    if not ok_mkdir then
+        disable("cannot create cache dir " .. cache_dir())
+        return
+    end
+
+    local tmp = path .. ".tmp." .. vim.uv.os_getpid()
+
+    if sync then
+        local f = io.open(tmp, "wb")
+        if not f then
+            disable("cannot write " .. tmp)
+            return
+        end
+        f:write(blob)
+        f:close()
+        local ok_mv, err_mv = os.rename(tmp, path)
+        if not ok_mv then
+            os.remove(tmp)
+            disable("cannot rename cache file: " .. tostring(err_mv))
+            return
+        end
+        M.rotate()
+        return
+    end
+
+    -- tmp name ends in ".tmp.<pid>", not ".mpack", so rotate()'s "%.mpack$"
+    -- filter never touches it mid-rename.
+    vim.uv.fs_open(tmp, "w", 438, function(err, fd)
+        if err or not fd then
+            vim.schedule(function()
+                disable("cannot write " .. tmp .. ": " .. tostring(err))
+            end)
+            return
+        end
+        vim.uv.fs_write(fd, blob, -1, function(werr)
+            vim.uv.fs_close(fd, function()
+                if werr then
+                    vim.uv.fs_unlink(tmp, function() end)
+                    vim.schedule(function()
+                        disable("cache write failed: " .. tostring(werr))
+                    end)
+                    return
+                end
+                vim.uv.fs_rename(tmp, path, function(rerr)
+                    if rerr then
+                        vim.uv.fs_unlink(tmp, function() end)
+                        vim.schedule(function()
+                            disable("cannot rename cache file: " .. tostring(rerr))
+                        end)
+                        return
+                    end
+                    vim.schedule(M.rotate)
+                end)
+            end)
+        end)
+    end)
+end
+
+--- Remove the persisted cache for a buffer (used by :FIX cache clear).
+---@param buf number
+function M.delete(buf)
+    local path = M.path_for(buf)
+    if path then
+        os.remove(path)
+    end
+end
+
+return M

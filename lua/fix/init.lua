@@ -2,7 +2,6 @@
 -- TODO: formatting for sender/receiver
 -- TODO: support custom dictionaries
 -- TODO: add option for custom tags
--- TODO: lazy dict loading
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
@@ -31,15 +30,27 @@
 ---@field annotate.message.enabled? boolean
 ---@field annotate.message.position? string "above" | "below"
 ---@field annotate.message.formatter? fun(message: Message): {line: {text: string, highlight: string}}
+---@field cache? table
+---@field cache.persist? table
+---@field cache.persist.enabled? boolean
+---@field cache.persist.max_files? number
+---@field cache.persist.dir? string
+---@field render? table
+---@field render.debounce_ms? number
+---@field render.lines_per_batch? number
+---@field render.viewport_margin? number
 
-local Annotate = require("fix.annotate")
+local Cache = require("fix.cache")
 local Consts = require("fix.consts")
 local Document = require("fix.document")
+local MessageFormatter = require("fix.formatters.message")
+local Persist = require("fix.persist")
+local Render = require("fix.render")
+local TagFormatter = require("fix.formatters.tag")
+local ValueFormatter = require("fix.formatters.value")
 local Yank = require("fix.yank")
 
 local M = {}
-
-local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 
 -- TODO: test
 -- TODO: document
@@ -51,17 +62,29 @@ local default_settings = {
     annotate = {
         tag = {
             enabled = true,
-            formatter = require("fix.formatters.tag").default,
+            formatter = TagFormatter.default,
         },
         value = {
             enabled = true,
-            formatter = require("fix.formatters.value").default,
+            formatter = ValueFormatter.default,
         },
         message = {
             enabled = true,
             position = "above",
-            formatter = require("fix.formatters.message").default,
+            formatter = MessageFormatter.default,
         },
+    },
+    cache = {
+        persist = {
+            enabled = true,
+            max_files = 20,
+            dir = nil, -- defaults to stdpath("cache") .. "/fix.nvim" at runtime
+        },
+    },
+    render = {
+        debounce_ms = 80,
+        lines_per_batch = 500,
+        viewport_margin = 50,
     },
 }
 
@@ -83,31 +106,62 @@ end
 local function register_autocmds()
     local group = vim.api.nvim_create_augroup("fix-decorate", { clear = true })
 
-    vim.api.nvim_create_autocmd({ "BufReadPost", "BufWinEnter", "BufAdd", "TextChanged", "TextChangedI" }, {
-        group = group,
-        callback = function(args)
-            if vim.bo[args.buf].filetype == "fix" then
-                Annotate.annotate_all(M.opts, args.buf, ns_id)
-            end
-        end,
-    })
-
     vim.api.nvim_create_autocmd("FileType", {
         group = group,
         pattern = "fix",
         callback = function(args)
-            Annotate.annotate_all(M.opts, args.buf, ns_id)
+            Render.attach(args.buf)
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("BufWinEnter", {
+        group = group,
+        callback = function(args)
+            if vim.bo[args.buf].filetype == "fix" then
+                Render.attach(args.buf)
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd({ "WinScrolled", "WinResized" }, {
+        group = group,
+        callback = function(args)
+            if vim.bo[args.buf].filetype == "fix" then
+                Render.refresh_viewport(args.buf)
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("BufUnload", {
+        group = group,
+        callback = function(args)
+            if vim.bo[args.buf].filetype == "fix" then
+                Render.flush(args.buf)
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+        group = group,
+        callback = function()
+            Render.flush_all_sync()
         end,
     })
 end
 
 ---@param opts FixOpts
 function M.setup(opts)
+    local is_resetup = M.opts ~= nil
     M.opts = vim.tbl_deep_extend("force", default_settings, opts or {})
     M.opts_initial = vim.deepcopy(M.opts)
 
     register_filetype()
     register_autocmds()
+
+    if is_resetup then
+        Cache.drop_render()
+        Render.rerender_all()
+    end
 end
 
 ---@param scope? "all" | "tag" | "value" | "message"
@@ -140,7 +194,7 @@ function M.annotate_toggle(scope)
         M.opts.annotate.message.enabled = not M.opts.annotate.message.enabled
     end
 
-    Annotate.annotate_all(M.opts, buf, ns_id)
+    Render.rerender(buf)
 end
 
 function M.browse_tag_online()
@@ -164,9 +218,21 @@ function M.browse_tag_online()
         [Consts.FixVersion.FIX_5_0] = "5.0",
     }
 
+    -- TODO: support custom URLs
     vim.ui.open(
         string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", versions[message.version], field.tag)
     )
+end
+
+--- Drop all cached annotation data for the current file and re-render.
+function M.cache_clear()
+    local buf = vim.api.nvim_get_current_buf()
+    if vim.bo[buf].filetype ~= "fix" then
+        return
+    end
+    Persist.delete(buf)
+    Cache.clear()
+    Render.purge(buf)
 end
 
 ---@param regname string?

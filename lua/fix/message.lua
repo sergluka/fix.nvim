@@ -1,8 +1,9 @@
+local Field = require("fix.field")
+
 --- @class Message
 --- @field version FixVersion
 --- @field lineno number
 --- @field _fields { [number]: Field }
---- @field extmark_title_id? number
 local M = {}
 
 function M.new(version, lineno, fields)
@@ -10,7 +11,6 @@ function M.new(version, lineno, fields)
         version = version,
         lineno = lineno,
         _fields = fields,
-        extmark_title_id = nil,
     }
     setmetatable(self, { __index = M })
     return self
@@ -21,7 +21,7 @@ end
 function M:field(tag)
     local field = self._fields[tag]
     if field == nil then
-        return require("fix.field").empty()
+        return Field.empty()
     end
 
     return field
@@ -42,18 +42,6 @@ function M:list_fields()
         return lhs.index < rhs.index
     end)
     return fields
-end
-
----@param bufnr number
----@param ns_id number
-function M:clear(ns_id, bufnr)
-    for _, field in pairs(self._fields) do
-        field:clear(ns_id, bufnr)
-    end
-    if self.extmark_title_id then
-        vim.api.nvim_buf_del_extmark(bufnr, ns_id, self.extmark_title_id)
-        self.extmark_title_id = nil
-    end
 end
 
 return M

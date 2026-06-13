@@ -36,14 +36,7 @@ T["set ft=fix on plain buffer triggers annotations"] = function()
 		})
 	]])
     nvim().cmd("set filetype=fix")
-    H.wait_for(
-        nvim(),
-        [[(function()
-			local ns = vim.api.nvim_create_namespace("fix-protocol")
-			return #vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}) > 0
-		end)()]],
-        500
-    )
+    H.wait_annotated(nvim())
     MiniTest.expect.equality(#H.get_extmarks(nvim()) > 0, true)
 end
 
@@ -56,22 +49,18 @@ T["ft change from fix to text leaves namespace intact"] = function()
     MiniTest.expect.equality(#H.get_extmarks(nvim()), before)
 end
 
-T["TextChangedI re-renders without duplicating extmarks"] = function()
+T["edit re-renders without duplicating extmarks"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     local before = #H.get_extmarks(nvim())
     nvim().type_keys("Go# comment", "<Esc>")
-    -- Wait for the autocmd to settle. The comment line is not a FIX
-    -- message so the extmark count must stop changing, not just be
-    -- non-zero — poll for stability.
-    H.wait_for(nvim(), [[(function()
-			local ns = vim.api.nvim_create_namespace("fix-protocol")
-			return #vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}) >= ]] .. before .. [[
-		end)()]], 500)
-    H.sleep(nvim(), 50)
+    -- The edit flows through on_lines + debounce; wait for the scheduler to
+    -- settle. The comment line is not a FIX message, so the count must not
+    -- grow beyond a small tolerance.
+    H.wait_annotated(nvim())
     local after = #H.get_extmarks(nvim())
-    MiniTest.expect.equality(after > 0, true)
     -- A new line was appended; tolerance accounts for any new annotations
-    -- but rules out duplication of the originals.
+    -- but rules out duplication of the originals or a regression that strips them.
+    MiniTest.expect.equality(after >= before, true)
     MiniTest.expect.equality(after <= before + 5, true)
 end
 

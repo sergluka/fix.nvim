@@ -61,14 +61,7 @@ T["known tag with unknown enum value annotates tag only"] = function()
 		})
 	]])
     nvim().cmd("set filetype=fix")
-    H.wait_for(
-        nvim(),
-        [[(function()
-			local ns = vim.api.nvim_create_namespace("fix-protocol")
-			return #vim.api.nvim_buf_get_extmarks(0, ns, 0, -1, {}) > 0
-		end)()]],
-        500
-    )
+    H.wait_annotated(nvim())
     -- MsgType tag is known → annotated; value "ZZ" is not a known enum →
     -- no value annotation.
     H.expect_inline_label(nvim(), "MsgType")

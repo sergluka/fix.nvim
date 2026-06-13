@@ -23,20 +23,20 @@ T["4.4.fix message title is virt_lines above each message"] = function()
     H.expect_virt_lines_count(nvim(), 2)
 end
 
-T["position=below shifts title anchor row down"] = function()
+T["position=below anchors title on message line with virt_lines_above=false"] = function()
     nvim().lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 2)
-    -- With position=below at least one virt_lines anchor sits on a row
-    -- below the first non-blank line.
+    -- With position=below all title marks anchor on the message line itself
+    -- (virt_lines_above=false), not on the following line.
     local marks = H.get_extmarks(nvim())
-    local has_anchor_below_first = false
+    local has_below_anchor = false
     for _, m in ipairs(marks) do
-        if m.details.virt_lines and m.row >= 2 then
-            has_anchor_below_first = true
+        if m.details.virt_lines and m.details.virt_lines_above == false then
+            has_below_anchor = true
         end
     end
-    MiniTest.expect.equality(has_anchor_below_first, true)
+    MiniTest.expect.equality(has_below_anchor, true)
 end
 
 T["FIXT.1.1 BeginString resolves to FIX.5.0SP2 dictionary"] = function()

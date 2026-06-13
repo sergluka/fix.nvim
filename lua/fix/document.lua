@@ -1,5 +1,8 @@
+local Cache = require("fix.cache")
 local Consts = require("fix.consts")
 local Dictionary = require("fix.dictionary")
+local Field = require("fix.field")
+local Message = require("fix.message")
 
 local M = {}
 
@@ -14,18 +17,24 @@ local versions = {
     ["FIXT.1.1"] = Consts.FixVersion.FIX_5_0,
 }
 
----@param fields {[number]: Field}
+---@param fields Field[]
 ---@return FixVersion?
 local function get_version(fields)
-    local begin_string = fields[8]
+    local begin_string
+    for _, field in ipairs(fields) do
+        if field.tag == 8 then
+            begin_string = field.value
+            break
+        end
+    end
     if not begin_string then
-        vim.notify("Missing BeginString (tag 8)")
+        vim.notify_once("Missing BeginString (tag 8)", vim.log.levels.WARN)
         return nil
     end
 
-    local version = versions[begin_string.value]
+    local version = versions[begin_string]
     if not version then
-        vim.notify("Unknown BeginString (tag 8): " .. begin_string.value)
+        vim.notify_once("Unknown BeginString (tag 8): " .. begin_string, vim.log.levels.WARN)
         return nil
     end
 
@@ -36,7 +45,7 @@ end
 ---@param field_node TSNode
 ---@param index number
 ---@return Field
-local function node_to_field(buf, field_node, index)
+local function node_to_semantic_field(buf, field_node, index)
     local tag_node = nil
     local equals_node = nil
     local value_node = nil
@@ -59,18 +68,58 @@ local function node_to_field(buf, field_node, index)
     local _, tag_start_col, _, tag_end_col = tag_node:range()
     local _, value_start_col, _, value_end_col = value_node:range()
 
-    local tag_text = vim.treesitter.get_node_text(tag_node, buf)
-    local value_text = vim.treesitter.get_node_text(value_node, buf)
-
-    return require("fix.field").new({
+    return Field.new({
         index = index,
+        tag = tonumber(vim.treesitter.get_node_text(tag_node, buf)),
+        value = vim.treesitter.get_node_text(value_node, buf),
         tag_start = tag_start_col,
         tag_end = tag_end_col,
         value_start = value_start_col,
         value_end = value_end_col,
-        tag = tonumber(tag_text),
-        value = value_text,
     })
+end
+
+---@param semantic FixSemantic
+local function decode(semantic)
+    local dict = Dictionary.load(semantic.version)
+    if not dict then
+        return
+    end
+    for _, field in ipairs(semantic.fields) do
+        local field_def = dict:field(field.tag)
+        if field_def then
+            field.tag_text = field_def.name
+        end
+        local enum_def = dict:enum(field.tag, field.value)
+        if enum_def then
+            field.value_text = enum_def.name
+        end
+    end
+end
+
+---@param buf number
+---@param message_node TSNode
+---@return FixSemantic
+local function semantic_from_node(buf, message_node)
+    local fields = {}
+    local index = 1
+    for field_node in message_node:iter_children() do
+        if field_node:type() == "field" then
+            fields[#fields + 1] = node_to_semantic_field(buf, field_node, index)
+            index = index + 1
+        end
+    end
+
+    local version = get_version(fields)
+    if not version then
+        -- TODO: make configurable?
+        vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
+        version = Consts.FixVersion.FIX_4_0
+    end
+
+    local semantic = { version = version, fields = fields }
+    decode(semantic)
+    return semantic
 end
 
 --- @param fields {[string]: Field}
@@ -90,142 +139,107 @@ local function insert_field(fields, field)
     vim.notify_once("Too many duplicate tags, something is wrong", vim.log.levels.WARN)
 end
 
----@param buf number
----@param message_node TSNode
+---@param semantic FixSemantic
+---@param lineno number
 ---@return Message
-local function node_to_message(buf, message_node)
-    local lineno, _, _, _ = message_node:range()
+function M.message_from_semantic(semantic, lineno)
     local fields = {}
-    local index = 1
-    for field_node in message_node:iter_children() do
-        if field_node:type() == "field" then
-            local field = node_to_field(buf, field_node, index)
-            insert_field(fields, field)
-            index = index + 1
+    for _, sf in ipairs(semantic.fields) do
+        insert_field(fields, Field.copy(sf))
+    end
+    return Message.new(semantic.version, lineno, fields)
+end
+
+---@param buf number
+---@param lnum number 0-based
+---@return TSNode|nil node, boolean covered  -- covered=false: the tree does not span lnum (stale/in-flight parse)
+local function message_node_at(buf, lnum)
+    local ok, parser = pcall(vim.treesitter.get_parser, buf, "fix")
+    if not ok or not parser then
+        error("No FIX parser for buffer " .. buf)
+    end
+    local root = parser:parse()[1]:root()
+    local _, _, end_row, end_col = root:range()
+    if lnum > end_row or (lnum == end_row and end_col == 0) then
+        return nil, false
+    end
+    local node = root:descendant_for_range(lnum, 0, lnum, 0)
+    while node and node:type() ~= "message" do
+        node = node:parent()
+    end
+    return node, true
+end
+
+--- Build (or fetch from cache) the message on a line.
+--- `line_text`/`key` may be passed by callers that already fetched them.
+--- `authoritative=false` means the result must not be remembered: the tree
+--- did not span the line (a render racing a buffer reload).
+---@param buf number
+---@param lnum number 0-based
+---@param line_text string|nil
+---@param key string|nil
+---@return Message|nil message, string key, boolean authoritative
+function M.build_line(buf, lnum, line_text, key)
+    line_text = line_text or vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1]
+    if line_text == nil then
+        return nil, "", true
+    end
+    key = key or Cache.key(line_text)
+
+    local semantic = Cache.get_semantic(key)
+    if semantic == nil then
+        local node, covered = message_node_at(buf, lnum)
+        if node then
+            semantic = semantic_from_node(buf, node)
+            Cache.put_semantic(key, semantic)
+        elseif covered then
+            semantic = false
+            Cache.put_semantic(key, semantic)
+        else
+            -- Caching a negative here would poison the content-keyed cache
+            -- permanently. Treat as "no message" for this render only.
+            return nil, key, false
         end
     end
 
-    local version = get_version(fields)
-    if not version then
-        -- TODO: make configurable?
-        vim.notify_once("Cannot get FIX version, fallback to FIX.4.0", vim.log.levels.WARN)
-        version = Consts.FixVersion.FIX_4_0
+    if not semantic then
+        return nil, key, true
     end
-
-    return require("fix.message").new(version, lineno, fields)
+    return M.message_from_semantic(semantic, lnum), key, true
 end
 
----@param message Message
-local function decode(message)
-    local dict = Dictionary.load(message.version)
-    if dict then
-        for _, field in pairs(message:fields()) do
-            local field_def = dict:field(field.tag)
-            if field_def then
-                field.tag_text = field_def.name
-            end
-            local enum_def = dict:enum(field.tag, field.value)
-            if enum_def then
-                field.value_text = enum_def.name
-            end
-        end
-    end
-end
-
+-- Cold/whole-buffer path; per-line cache misses are amortized by the render scheduler.
 ---@param buf number
 ---@param on_message fun(message: Message)
 function M.iter_messages(buf, on_message)
-    local parser = vim.treesitter.get_parser(buf, "fix")
-    if not parser then
-        error("No FIX parser for buffer " .. buf)
-    end
-
-    local tree = parser:parse()[1]
-    local root = tree:root()
-
-    for message_node in root:iter_children() do
-        if message_node:type() == "message" then
-            local message = node_to_message(buf, message_node)
-            decode(message)
+    for lnum = 0, vim.api.nvim_buf_line_count(buf) - 1 do
+        local message = M.build_line(buf, lnum)
+        if message then
             on_message(message)
         end
     end
 end
 
+--- Resolve the field at the cursor by column containment — no buffer-tree
+--- access, so it stays correct on bigfile buffers (where the tree may be
+--- unparsed at the cursor) and never throws on an unexpected node shape.
 ---@param buf number
 ---@return Message|nil, Field|nil
 function M.get_field_under_cursor(buf)
-    local node = vim.treesitter.get_node()
-    if node == nil then
+    local pos = vim.api.nvim_win_get_cursor(0)
+    local lnum, col = pos[1] - 1, pos[2]
+
+    local message = M.build_line(buf, lnum)
+    if message == nil then
         return nil, nil
     end
 
-    local node_type = node:type()
-    if node_type == "tag" or node_type == "value" or node_type == "equals" then
-        local field_node = node:parent()
-        if field_node == nil or field_node:type() ~= "field" then
-            error("unexpected document structure")
+    for _, field in pairs(message:fields()) do
+        if col >= field.tag_start and col < field.value_end then
+            return message, field
         end
-
-        local message_node = field_node:parent()
-        if message_node == nil or message_node:type() ~= "message" then
-            error("unexpected document structure")
-        end
-        local message = node_to_message(buf, message_node)
-        decode(message)
-
-        for _, field in pairs(message:fields()) do
-            local _, tag_start_col = field_node:range()
-            if field.tag_start == tag_start_col then
-                return message, field
-            end
-        end
-        error("field not found in message")
-    else
-        return nil, nil
     end
-end
-
----@param buf number
----@return Message|nil, Field|nil
-function M.get_message_at(buf, lineno)
-    -- XXX: refact
-    local parser = vim.treesitter.get_parser(buf, "fix")
-    if not parser then
-        error("No FIX parser for buffer " .. buf)
-    end
-    local tree = parser:parse()[1]
-    local root = tree:root()
-
-    local node = root:descendant_for_range(lineno, 0, lineno, 0)
-    if node == nil then
-        return nil, nil
-    end
-
-    local node_type = node:type()
-    if node_type == "tag" or node_type == "value" or node_type == "equals" then
-        local field_node = node:parent()
-        if field_node == nil or field_node:type() ~= "field" then
-            error("unexpected document structure")
-        end
-
-        local message_node = field_node:parent()
-        if message_node == nil or message_node:type() ~= "message" then
-            error("unexpected document structure")
-        end
-        local message = node_to_message(buf, message_node)
-        decode(message)
-
-        for _, field in pairs(message:fields()) do
-            local _, tag_start_col = field_node:range()
-            if field.tag_start == tag_start_col then
-                return message, field
-            end
-        end
-        error("field not found in message")
-    else
-        return nil, nil
-    end
+    return nil, nil
 end
 
 return M

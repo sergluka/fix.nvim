@@ -114,6 +114,12 @@ T["FIX --help does not error"] = function()
     end
 end
 
+T["FIX cache clear is registered"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().cmd("FIX cache clear")
+    H.expect_no_error_notifications(nvim())
+end
+
 T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 0)
     nvim().cmd("FIX picker")
