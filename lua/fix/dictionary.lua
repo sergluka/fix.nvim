@@ -1,8 +1,5 @@
 local xml2lua = require("xml2lua")
 
----@class M
----@field _cache table<string, Dictionary>
-
 ---@alias FixMessageType integer
 ---@alias FieldsDef  { [number]: FieldDef }
 
@@ -25,6 +22,13 @@ local xml2lua = require("xml2lua")
 ---@class Dictionary
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>
+
+---@class FixDictionaryModule
+---@field private _cache? table<string, Dictionary>
+---@field resolve_version fun(version: string): string
+---@field has_version fun(version: string): boolean
+---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>): Dictionary
+---@field load fun(version: string): Dictionary?
 local M = {}
 
 local aliases = {
@@ -140,18 +144,18 @@ function M.load(version)
     return dict
 end
 
---@param tag integer
+---@param tag integer
 function M:field(tag)
     return self._fields[tag]
 end
 
---@param tag integer
---@param value string
+---@param tag integer
+---@param value string
 function M:enum(tag, value)
     return self._enums[tag .. ":" .. value]
 end
 
---@param value string
+---@param value string
 function M:message(value)
     return self:enum(35, value)
 end

@@ -42,6 +42,7 @@ T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
 end
 
 T["has_version checks bundled dictionaries and aliases"] = function()
+    MiniTest.expect.equality(Dictionary.has_version("FIX.5.0"), true)
     MiniTest.expect.equality(Dictionary.has_version("FIX.5.0SP2"), true)
     MiniTest.expect.equality(Dictionary.has_version("FIXT.1.1"), true)
     MiniTest.expect.equality(Dictionary.has_version("FIX.9.9"), false)
