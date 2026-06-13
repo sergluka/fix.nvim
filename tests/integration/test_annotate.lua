@@ -17,7 +17,8 @@ T["4.4.fix value extmarks contain enum names"] = function()
     H.expect_inline_label(nvim(), "NewOrderSingle")
 end
 
-T["4.4.fix message title is virt_lines above each message"] = function()
+T["position=above renders title as virt_lines above each message"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     -- 4.4.fix has 2 messages → 2 title extmarks.
     H.expect_virt_lines_count(nvim(), 2)
@@ -37,6 +38,24 @@ T["position=below anchors title on message line with virt_lines_above=false"] = 
         end
     end
     MiniTest.expect.equality(has_below_anchor, true)
+end
+
+T["position=front renders title as inline text at column zero"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "front" } } })]])
+    H.load_fixture(nvim(), "4.4.fix")
+    H.expect_virt_lines_count(nvim(), 0)
+
+    local front_titles = 0
+    for _, m in ipairs(H.get_extmarks(nvim())) do
+        local vt = m.details.virt_text
+        if m.col == 0 and m.details.virt_text_pos == "inline" and vt and vt[1] and vt[1][2] == "Title" then
+            front_titles = front_titles + 1
+        end
+    end
+
+    MiniTest.expect.equality(front_titles, 2)
+    H.expect_inline_label(nvim(), "BeginString")
+    H.expect_inline_label(nvim(), "MsgType")
 end
 
 T["FIXT.1.1 BeginString resolves to FIX.5.0SP2 dictionary"] = function()

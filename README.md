@@ -8,7 +8,7 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 
 - Syntax highlighting through [tree-sitter-fix](https://github.com/sergluka/tree-sitter-fix)
 - Inline tag and enum annotations with configurable formatters
-- Message summary titles above or below each FIX message
+- Message summary titles above, below, or at the front of each FIX message
 - SOH (`\x01`) concealment for readable log files
 - Multiple FIX dictionary versions, including `FIXT.1.1` via `FIX.5.0SP2`
 - Viewport-first rendering with background cache warm-up for large files
@@ -93,7 +93,7 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
     },
     message = {
       enabled = true,
-      position = "above", -- "above" | "below"
+      position = "above", -- "above" | "below" | "front"
       formatter = require("fix.formatters.message").default,
     },
   },
@@ -204,7 +204,7 @@ message title is hidden, use one of these workarounds:
 
 - Add an empty line at the beginning of the file.
 - Press `<C-b>` after opening the file.
-- Set `annotate.message.position = "below"`.
+- Set `annotate.message.position = "below"` or `"front"`.
 
 ## Development
 

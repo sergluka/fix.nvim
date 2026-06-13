@@ -55,9 +55,8 @@ function M.payload_for(message, key, opts)
 end
 
 --- Apply a payload to one line: point-clear, then set extmarks filtered by
---- the enabled flags. All marks of a message (including the title for
---- position="below") anchor on the message line itself, so the point-clear
---- can never orphan anything.
+--- the enabled flags. All marks of a message anchor on the message line
+--- itself, so the point-clear can never orphan anything.
 ---@param opts FixOpts
 ---@param bufnr number
 ---@param ns_id number
@@ -70,10 +69,20 @@ function M.apply(opts, bufnr, ns_id, lnum, payload)
     end
 
     if opts.annotate.message.enabled and payload.title then
-        vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
-            virt_lines = payload.title,
-            virt_lines_above = opts.annotate.message.position == "above",
-        })
+        if opts.annotate.message.position == "front" then
+            local virt_text = payload.title[1]
+            if virt_text then
+                vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+                    virt_text = virt_text,
+                    virt_text_pos = "inline",
+                })
+            end
+        else
+            vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+                virt_lines = payload.title,
+                virt_lines_above = opts.annotate.message.position == "above",
+            })
+        end
     end
 
     for _, mark in ipairs(payload.marks) do

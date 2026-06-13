@@ -28,7 +28,7 @@
 ---@field annotate.value.formatter? fun(field: Field): {text: string, highlight: string}
 ---@field annotate.message? table
 ---@field annotate.message.enabled? boolean
----@field annotate.message.position? string "above" | "below"
+---@field annotate.message.position? string "above" | "below" | "front"
 ---@field annotate.message.formatter? fun(message: Message): {line: {text: string, highlight: string}}
 ---@field cache? table
 ---@field cache.persist? table

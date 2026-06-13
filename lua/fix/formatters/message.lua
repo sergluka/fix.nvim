@@ -53,9 +53,12 @@ function M.default(message)
         end
     end
 
-    return {
-        { { text, "Title" }, { " | " .. details, "Repeat" } },
-    }
+    local title = { { text .. " | ", "Title" } }
+    if details ~= "" then
+        title[#title + 1] = { details .. " | ", "Repeat" }
+    end
+
+    return { title }
 end
 
 return M

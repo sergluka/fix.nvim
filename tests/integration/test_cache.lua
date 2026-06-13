@@ -198,6 +198,7 @@ end
 
 T["behavior"]["deleting the last line removes its annotations"] = function()
     local nvim = Helpers.nvim()
+    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
     Helpers.load_fixture(nvim, "duplicated-lines.fix")
     Helpers.expect_virt_lines_count(nvim, 3)
 
@@ -211,6 +212,7 @@ end
 
 T["behavior"]["shrinking reload leaves no stale titles"] = function()
     local nvim = Helpers.nvim()
+    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
 
     -- Simulate `git revert` of a big file: open it, then replace it on disk
     -- with shorter content and reload.
@@ -243,6 +245,7 @@ end
 
 T["behavior"]["growing reload does not poison the cache"] = function()
     local nvim = Helpers.nvim()
+    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
     local message_line = nvim.lua_get([=[vim.fn.readfile("tests/integration/fixtures/4.4.fix")[2]]=])
 
     -- Small warmed file...

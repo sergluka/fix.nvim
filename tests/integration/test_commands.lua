@@ -23,6 +23,7 @@ T["FIX annotations value toggle"] = function()
 end
 
 T["FIX annotations message toggle"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 2)
     nvim().cmd("FIX annotations message")
@@ -32,6 +33,7 @@ T["FIX annotations message toggle"] = function()
 end
 
 T["FIX annotations all off then on restores per-scope flags"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     nvim().cmd("FIX annotations message")
     local pre_off_count = #H.get_extmarks(nvim())
