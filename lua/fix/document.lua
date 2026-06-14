@@ -151,8 +151,9 @@ end
 
 ---@param buf number
 ---@param lnum number 0-based
+---@param line_text string
 ---@return TSNode|nil node, boolean covered  -- covered=false: the tree does not span lnum (stale/in-flight parse)
-local function message_node_at(buf, lnum)
+local function message_node_at(buf, lnum, line_text)
     local ok, parser = pcall(vim.treesitter.get_parser, buf, "fix")
     if not ok or not parser then
         error("No FIX parser for buffer " .. buf)
@@ -162,7 +163,9 @@ local function message_node_at(buf, lnum)
     if lnum > end_row or (lnum == end_row and end_col == 0) then
         return nil, false
     end
-    local node = root:descendant_for_range(lnum, 0, lnum, 0)
+    local first_nonblank = line_text:find("%S")
+    local col = first_nonblank and first_nonblank - 1 or 0
+    local node = root:descendant_for_range(lnum, col, lnum, col)
     while node and node:type() ~= "message" do
         node = node:parent()
     end
@@ -187,7 +190,7 @@ function M.build_line(buf, lnum, line_text, key)
 
     local semantic = Cache.get_semantic(key)
     if semantic == nil then
-        local node, covered = message_node_at(buf, lnum)
+        local node, covered = message_node_at(buf, lnum, line_text)
         if node then
             semantic = semantic_from_node(buf, node)
             Cache.put_semantic(key, semantic)

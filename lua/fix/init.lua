@@ -6,9 +6,6 @@
 -- TODO: yank in picker
 -- TODO: highlight values based on Type
 
--- testing:
--- TODO: test with spaces at the start
-
 ---@class FixOpts
 ---@field ft? table
 ---@field ft.extensions? string[]

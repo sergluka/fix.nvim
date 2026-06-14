@@ -59,6 +59,47 @@ T["duplicate tags render both extmarks"] = function()
     MiniTest.expect.equality(H.inline_label_count(nvim(), "Symbol"), 2)
 end
 
+T["message with leading spaces is annotated"] = function()
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "   8=FIX.4.4|9=20|35=D|49=A|56=B|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "BeginString")
+    H.expect_inline_label(nvim(), "NewOrderSingle")
+
+    local decoded = nvim().lua_get([[
+        (function()
+            local message = require("fix.document").build_line(0, 0)
+            if message == nil then
+                return nil
+            end
+            local first = message:list_fields()[1]
+            return {
+                version = message.version,
+                tag = first.tag,
+                tag_start = first.tag_start,
+                tag_end = first.tag_end,
+                value_start = first.value_start,
+                value_end = first.value_end,
+            }
+        end)()
+    ]])
+    MiniTest.expect.equality(decoded, {
+        version = "FIX.4.4",
+        tag = 8,
+        tag_start = 3,
+        tag_end = 4,
+        value_start = 5,
+        value_end = 12,
+    })
+    H.expect_no_error_notifications(nvim())
+end
+
 T["empty buffer produces no extmarks and no errors"] = function()
     H.load_fixture(nvim(), "empty.fix", { expect_extmarks = false, timeout_ms = 100 })
     MiniTest.expect.equality(#H.get_extmarks(nvim()), 0)
