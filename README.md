@@ -68,11 +68,23 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 | `:FIX annotations [all|tag|value|message]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
+| `:FIX dictionary <PATH>` | `require("fix").use_dictionary(path)` | Use a custom FIX dictionary XML file or repository directory |
 | `:FIX yank [--reg=<REGISTER>]` | `require("fix").yank(reg)` | Smart yank: current/selected fields for characterwise targets, selected messages for linewise targets |
 | `:FIX cache clear` | `require("fix").cache_clear()` | Clear in-memory and on-disk cache entries for the current file, then re-render |
 
 `FIX yank` accepts visual ranges and Vim operator targets. Characterwise
 targets yank selected annotated fields; linewise targets yank selected messages.
+
+`FIX dictionary` accepts a QuickFIX-style XML file or a FIX Repository
+directory containing `Fields.xml` and `Enums.xml`. The dictionary version is
+detected from the XML and replaces the bundled dictionary for that version until
+another custom dictionary is registered for the same version or Neovim exits.
+Examples:
+
+```vim
+:FIX dictionary xml/custom/binance/spot-fix-oe.xml
+:FIX dictionary xml/custom/coinbase/order-entry/FIX42-prod-sand.xml
+```
 
 ## Configuration
 

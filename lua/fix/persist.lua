@@ -1,4 +1,5 @@
 local Cache = require("fix.cache")
+local Dictionary = require("fix.dictionary")
 local Log = require("fix.log")
 
 local M = {}
@@ -31,29 +32,12 @@ function M.path_for(buf)
     return cache_dir() .. "/" .. vim.fn.sha256(name):sub(1, 32) .. ".mpack"
 end
 
--- Fingerprint of the vendored dictionaries: any change to the XML data must
--- invalidate persisted entries (decoded names come from those files);
--- format_version alone only covers the cache schema.
-local _fingerprint
 function M.fingerprint()
-    if _fingerprint then
-        return _fingerprint
-    end
-    local source = debug.getinfo(1, "S").source:sub(2)
-    local root = vim.fs.dirname(vim.fs.dirname(vim.fs.dirname(source)))
-    local parts = {}
-    for _, xml in ipairs(vim.fn.globpath(root .. "/xml", "**/Base/*.xml", false, true)) do
-        local stat = vim.uv.fs_stat(xml)
-        if stat then
-            parts[#parts + 1] = string.format("%s:%d:%d", xml:sub(#root + 2), stat.mtime.sec, stat.size)
-        end
-    end
-    table.sort(parts)
-    if #parts == 0 then
+    local fingerprint = Dictionary.fingerprint()
+    if not fingerprint or fingerprint == "" then
         Log.warn("no dictionaries found for fingerprint")
     end
-    _fingerprint = vim.fn.sha256(table.concat(parts, ";")):sub(1, 16)
-    return _fingerprint
+    return fingerprint
 end
 
 ---@param buf number

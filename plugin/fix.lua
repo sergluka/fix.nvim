@@ -91,6 +91,16 @@ local function register_commands()
         fix.browse_tag_online()
     end)
 
+    local dictionary = top_subparser:add_parser({ name = "dictionary", help = "Use custom FIX dictionary" })
+    dictionary:add_parameter({
+        name = "path",
+        required = true,
+        help = "Dictionary XML file or directory",
+    })
+    dictionary:set_execute(function(data)
+        fix.use_dictionary(data.namespace.path)
+    end)
+
     local yank_parser = top_subparser:add_parser({ name = "yank", help = "Yank annotations" })
     yank_parser:add_parameter({
         name = "--reg",

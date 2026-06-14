@@ -9,3 +9,17 @@ FPL has no liability for any adaptations or modifications made to the original d
 
 For details, see: https://www.fixtrading.org/
 
+This project also includes publicly documented broker FIX dictionaries used by
+the integration tests:
+
+Coinbase Exchange FIX dictionaries
+- Files: xml/custom/coinbase/**/*.xml
+- Source: https://docs.cdp.coinbase.com/exchange/fix-api/dictionary-downloads
+- Archive: cb_exch_fix_dictionaries-20260612.zip
+- Terms: https://www.coinbase.com/legal/developer-agreement
+
+Binance Spot FIX schemas
+- Files: xml/custom/binance/*.xml
+- Source: https://developers.binance.com/docs/binance-spot-api-docs/fix-api
+- Repository: https://github.com/binance/binance-spot-api-docs
+- Terms: https://www.binance.com/en/terms

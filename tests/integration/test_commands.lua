@@ -305,6 +305,47 @@ T["FIX cache clear is registered"] = function()
     H.expect_no_error_notifications(nvim())
 end
 
+T["FIX dictionary uses Binance QuickFIX dictionary"] = function()
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|25036=1|25000=5000|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+    H.expect_no_inline_label(nvim(), "MessageHandling")
+
+    nvim().cmd("FIX dictionary xml/custom/binance/spot-fix-oe.xml")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "MessageHandling")
+    H.expect_inline_label(nvim(), "SEQUENTIAL")
+    H.expect_inline_label(nvim(), "ResponseMode")
+    H.expect_inline_label(nvim(), "EVERYTHING")
+    H.expect_inline_label(nvim(), "RecvWindow")
+end
+
+T["FIX dictionary uses Coinbase QuickFIX dictionary"] = function()
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.2|9=0|35=D|34=1|49=A|52=20240627-11:17:25.223|56=B|7928=O|9406=Y|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+    H.expect_no_inline_label(nvim(), "SelfTradePrevention")
+
+    nvim().cmd("FIX dictionary xml/custom/coinbase/order-entry/FIX42-prod-sand.xml")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "SelfTradePrevention")
+    H.expect_inline_label(nvim(), "CANCEL_OLDEST")
+    H.expect_inline_label(nvim(), "DropCopyFlag")
+    H.expect_inline_label(nvim(), "YES")
+end
+
 T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 0)
     nvim().cmd("FIX picker")

@@ -1,6 +1,5 @@
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
--- TODO: support custom dictionaries
 -- TODO: add option for custom tags
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
@@ -272,6 +271,18 @@ function M.cache_clear()
     Persist.delete(buf)
     Cache.clear()
     Render.purge(buf)
+end
+
+---@param path string
+function M.use_dictionary(path)
+    local source = Dictionary.register(path)
+    Cache.clear()
+    Render.rerender_all()
+    vim.notify(
+        string.format("fix.nvim: using custom FIX dictionary %s from %s", source.version, source.path),
+        vim.log.levels.INFO
+    )
+    return source
 end
 
 ---@param regname string?
