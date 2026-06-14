@@ -68,9 +68,11 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 | `:FIX annotations [all|tag|value|message]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
-| `:FIX yank field [--reg=<REGISTER>]` | `require("fix").yank_field(reg)` | Yank the annotated field under the cursor |
-| `:FIX yank message [--reg=<REGISTER>]` | `require("fix").yank_message(reg)` | Yank the annotated message under the cursor |
+| `:FIX yank [--reg=<REGISTER>]` | `require("fix").yank(reg)` | Smart yank: current/selected fields for characterwise targets, selected messages for linewise targets |
 | `:FIX cache clear` | `require("fix").cache_clear()` | Clear in-memory and on-disk cache entries for the current file, then re-render |
+
+`FIX yank` accepts visual ranges and Vim operator targets. Characterwise
+targets yank selected annotated fields; linewise targets yank selected messages.
 
 ## Configuration
 
@@ -139,7 +141,7 @@ scroll, which keeps large buffers responsive.
 
 ## Keybindings
 
-No keybindings are set by default. Add mappings to `ftplugin/fix.lua` or your
+No keybindings are set by default. Proposed mappings for `ftplugin/fix.lua` or your
 Neovim config:
 
 ```lua
@@ -147,6 +149,10 @@ local fix = require("fix")
 
 local function map(lhs, rhs, desc)
   vim.keymap.set("n", lhs, rhs, { buffer = true, desc = "fix: " .. desc })
+end
+
+local function smart_yank()
+  return fix.operator_yank_register("+")
 end
 
 map("<localleader>t", function()
@@ -161,18 +167,32 @@ map("<localleader>x", function()
   fix.browse_tag_online()
 end, "open online tag docs")
 
-map("<localleader>yf", function()
-  fix.yank_field("+")
-end, "yank field")
-
-map("<localleader>yy", function()
-  fix.yank_message("+")
-end, "yank message")
+vim.keymap.set("n", "<localleader>y", smart_yank, {
+  expr = true,
+  buffer = true,
+  desc = "fix: yank target",
+})
+vim.keymap.set("x", "<localleader>y", function()
+  fix.yank("+")
+end, {
+  buffer = true,
+  desc = "fix: yank selection",
+})
+vim.keymap.set(
+  "n",
+  "<localleader>yy",
+  function() return fix.operator_yank_register("+") .. "_" end,
+  { expr = true, buffer = true, desc = "fix: yank line" }
+)
 
 map("<localleader><localleader>", function()
   require("fix.snacks").open()
 end, "open field picker")
 ```
+
+Use `fix.operator_yank_register()` without an argument to write to Vim's default
+unnamed register. Pass `"+"` or another register name to make that mapping use
+a specific register by default.
 
 The following navigation mappings require `nvim-treesitter-textobjects`:
 
@@ -183,7 +203,7 @@ if not ok then
 end
 
 local function ts_map(lhs, method, query, desc)
-  vim.keymap.set({ "n", "v" }, lhs, function()
+  vim.keymap.set({ "n", "x", "o" }, lhs, function()
     ts_move[method](query)
   end, { buffer = true, desc = "fix: " .. desc })
 end
@@ -203,6 +223,25 @@ ts_map("[g", "goto_previous_start", "@comment", "previous comment start")
 ts_map("]G", "goto_next_end", "@comment", "next comment end")
 ts_map("[G", "goto_previous_end", "@comment", "previous comment end")
 ```
+
+With the yank mapping above, `<localleader>y` behaves like a Vim operator:
+type a motion after it to choose the FIX data to yank.
+
+Examples:
+
+```vim
+" Yank annotated fields from the cursor through the third next field end.
+<localleader>y3]]
+
+" Yank annotated messages covered by the current line and the line below.
+<localleader>yj
+
+" Yank annotated fields in the current visual selection.
+v...<localleader>y
+```
+
+Operator targets such as `]]` must be available in operator-pending mode (`"o"`).
+The `ts_map()` helper above uses `{ "n", "x", "o" }` for that reason.
 
 ## Limitations
 

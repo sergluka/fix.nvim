@@ -8,7 +8,6 @@
 -- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
 -- TODO: vimdoc
 -- TODO: CI: busted, linter
--- TODO: handle v mode for yank
 -- TODO: yank in picker
 -- TODO: highlight values based on Type
 
@@ -276,13 +275,22 @@ function M.cache_clear()
 end
 
 ---@param regname string?
-function M.yank_field(regname)
-    Yank.yank_field(M.opts, regname)
+---@param selection? FixYankSelection
+function M.yank(regname, selection)
+    Yank.yank(M.opts, regname, selection)
+end
+
+---@param motion_type string
+function M.operator_yank(motion_type)
+    Yank.operator_yank(M.opts, motion_type)
 end
 
 ---@param regname string?
-function M.yank_message(regname)
-    Yank.yank_message(M.opts, regname)
+---@return string
+function M.operator_yank_register(regname)
+    vim.b.fix_yank_operator_register = regname or ""
+    vim.go.operatorfunc = "v:lua.require'fix'.operator_yank"
+    return "g@"
 end
 
 return M

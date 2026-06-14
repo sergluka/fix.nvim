@@ -13,6 +13,39 @@ if not ok then
     return
 end
 
+local function command_selection(options)
+    if not options or not options.range or options.range == 0 then
+        return nil
+    end
+
+    local line1 = options.line1
+    local line2 = options.line2
+    if not line1 or not line2 then
+        return nil
+    end
+    local start_mark = vim.fn.getpos("'<")
+    local end_mark = vim.fn.getpos("'>")
+    local is_visual_range = start_mark[2] == line1 and end_mark[2] == line2
+
+    if is_visual_range and vim.fn.visualmode() == "v" then
+        return {
+            start_row = start_mark[2] - 1,
+            start_col = math.max(start_mark[3] - 1, 0),
+            end_row = end_mark[2] - 1,
+            end_col = end_mark[3],
+            kind = "char",
+        }
+    end
+
+    return {
+        start_row = line1 - 1,
+        start_col = 0,
+        end_row = line2 - 1,
+        end_col = math.huge,
+        kind = "line",
+    }
+end
+
 local function register_treesitter()
     local parsers = require("nvim-treesitter.parsers")
     local config = {
@@ -60,23 +93,14 @@ local function register_commands()
 
     local yank_parser = top_subparser:add_parser({ name = "yank", help = "Yank annotations" })
     yank_parser:add_parameter({
-        name = "yank",
+        name = "--reg",
         required = false,
-        choices = { "field", "message" },
-        help = "Type of annotation",
-        yank_parser:add_parameter({
-            name = "--reg",
-            required = false,
-            help = "Register",
-        }),
+        help = "Register",
     })
     yank_parser:set_execute(function(data)
         local register = data.namespace.reg
-        if data.namespace.yank == "field" then
-            fix.yank_field(register)
-        elseif data.namespace.yank == "message" then
-            fix.yank_message(register)
-        end
+        local selection = command_selection(data.options)
+        fix.yank(register, selection)
     end)
 
     local cache_parser = top_subparser:add_parser({ name = "cache", help = "Cache maintenance" })
@@ -86,7 +110,7 @@ local function register_commands()
         fix.cache_clear()
     end)
 
-    Cmdparse.create_user_command(parser)
+    Cmdparse.create_user_command(parser, nil, { range = true })
 end
 
 register_treesitter()

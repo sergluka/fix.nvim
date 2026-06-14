@@ -54,46 +54,229 @@ T["FIX annotations without scope toggles all"] = function()
     MiniTest.expect.equality(#H.get_extmarks(nvim()), #before)
 end
 
-T["FIX yank field uses unnamed register by default"] = function()
-    -- yank.lua passes `regname or ""` to setreg, which targets the unnamed
-    -- register. There is no clipboard provider in the headless container,
-    -- so reading from "+" yields empty even when yank succeeded.
+T["FIX yank smart default yanks current field in normal mode"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     nvim().cmd("normal! 2G0")
     nvim().fn.setreg("", "")
-    nvim().cmd("FIX yank field")
+    nvim().cmd("FIX yank")
     local reg = nvim().fn.getreg("")
+
     MiniTest.expect.equality(reg:find("8", 1, true) ~= nil, true)
     MiniTest.expect.equality(reg:find("FIX.4.4", 1, true) ~= nil, true)
-    -- Annotated form includes the tag-name label in parens.
     MiniTest.expect.equality(reg:find("BeginString", 1, true) ~= nil, true)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
 end
 
-T["FIX yank message yanks full annotated message"] = function()
+T["FIX yank smart default yanks fields inside characterwise visual range"] = function()
     H.load_fixture(nvim(), "4.4.fix")
-    nvim().cmd("normal! 2G0")
     nvim().fn.setreg("", "")
-    nvim().cmd("FIX yank message")
+    nvim().cmd([[execute "normal! 2G015lv8l\<Esc>"]])
+    nvim().cmd([['<,'>FIX yank]])
     local reg = nvim().fn.getreg("")
-    -- Heartbeat (35=0) on line 2 of 4.4.fix has exactly 8 fields → 7
-    -- inter-field separators. Asserting the exact count catches both
-    -- truncation and accidental duplication; an annotated-label test
-    -- below also locks the formatter output.
     local _, sep_count = reg:gsub("|", "|")
-    MiniTest.expect.equality(sep_count, 7)
-    -- Every header field's name must appear in the yanked text.
-    for _, name in ipairs({
-        "BeginString",
-        "BodyLength",
-        "MsgType",
-        "MsgSeqNum",
-        "SenderCompID",
-        "TargetCompID",
-        "SendingTime",
-        "CheckSum",
-    }) do
-        MiniTest.expect.equality(reg:find(name, 1, true) ~= nil, true)
-    end
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank smart default yanks characterwise visual mapping"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[vim.keymap.set("x", "<F5>", ":FIX yank<CR>", { buffer = true })]])
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2G015lv8l\<F5>"]])
+    local reg = nvim().fn.getreg("")
+    local _, sep_count = reg:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank smart default visual mapping supports explicit register"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[vim.keymap.set("x", "<F5>", ":FIX yank --reg=a<CR>", { buffer = true })]])
+    nvim().fn.setreg("a", "")
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2G015lv8l\<F5>"]])
+    local reg_a = nvim().fn.getreg("a")
+    local unnamed = nvim().fn.getreg("")
+    local _, sep_count = reg_a:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg_a:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg_a:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg_a:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(unnamed, "")
+    MiniTest.expect.equality(nvim().fn.getregtype("a"), "v")
+end
+
+T["FIX yank smart default yanks characterwise visual lua mapping"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[vim.keymap.set("x", "<F5>", function() require("fix").yank() end, { buffer = true })]])
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2G015lv8l\<F5>"]])
+    local reg = nvim().fn.getreg("")
+    local _, sep_count = reg:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank operator mapping yanks characterwise visual selection"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[
+        local function smart_yank()
+            vim.go.operatorfunc = "v:lua.require'fix'.operator_yank"
+            return "g@"
+        end
+        vim.keymap.set({ "n", "x" }, "<F5>", smart_yank, { expr = true, buffer = true })
+    ]])
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2G015lv8l\<F5>"]])
+    local reg = nvim().fn.getreg("")
+    local _, sep_count = reg:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank operator mapping works with v mode mapping alias"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[
+        local function smart_yank()
+            vim.go.operatorfunc = "v:lua.require'fix'.operator_yank"
+            return "g@"
+        end
+        vim.keymap.set({ "n", "v" }, "<F5>", smart_yank, { expr = true, buffer = true })
+    ]])
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2G015lv8l\<F5>"]])
+    local reg = nvim().fn.getreg("")
+    local _, sep_count = reg:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 1)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("BeginString", 1, true), nil)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank operator mapping can default to a register for visual selection"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[
+        vim.keymap.set({ "n", "x" }, "<F5>", function()
+            return require("fix").operator_yank_register("a")
+        end, { expr = true, buffer = true })
+    ]])
+    nvim().fn.setreg("a", "old")
+    nvim().fn.setreg("", "old")
+    nvim().cmd([[execute "normal 2G0vee\<F5>"]])
+    local reg_a = nvim().fn.getreg("a")
+
+    MiniTest.expect.equality(reg_a, "8(BeginString)=FIX.4.4")
+    MiniTest.expect.equality(nvim().fn.getreg(""), "old")
+    MiniTest.expect.equality(nvim().fn.getregtype("a"), "v")
+end
+
+T["FIX yank operator register helper defaults to unnamed register"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[
+        vim.keymap.set({ "n", "x" }, "<F5>", function()
+            return require("fix").operator_yank_register()
+        end, { expr = true, buffer = true })
+    ]])
+    nvim().fn.setreg("a", "old")
+    nvim().fn.setreg("", "old")
+    nvim().cmd([[execute "normal 2G0vee\<F5>"]])
+
+    MiniTest.expect.equality(nvim().fn.getreg(""), "8(BeginString)=FIX.4.4")
+    MiniTest.expect.equality(nvim().fn.getreg("a"), "old")
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
+end
+
+T["FIX yank smart default yanks messages for line range"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().fn.setreg("", "")
+    nvim().cmd("2,3FIX yank")
+    local reg = nvim().fn.getreg("")
+
+    MiniTest.expect.equality(reg:find("Heartbeat", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("NewOrderSingle", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("ClOrdID", 1, true) ~= nil, true)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "V")
+end
+
+T["FIX yank smart default yanks messages for linewise visual mapping"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().lua([[vim.keymap.set("x", "<F5>", ":FIX yank<CR>", { buffer = true })]])
+    nvim().fn.setreg("", "")
+    nvim().cmd([[execute "normal 2GVj\<F5>"]])
+    local reg = nvim().fn.getreg("")
+
+    MiniTest.expect.equality(reg:find("Heartbeat", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("NewOrderSingle", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("ClOrdID", 1, true) ~= nil, true)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "V")
+end
+
+T["FIX operator yank yanks messages for line motion"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().fn.setreg("", "")
+    nvim().lua([[vim.go.operatorfunc = "v:lua.require'fix'.operator_yank"]])
+    nvim().cmd("normal! 2G0g@j")
+    local reg = nvim().fn.getreg("")
+
+    MiniTest.expect.equality(reg:find("Heartbeat", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("NewOrderSingle", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("ClOrdID", 1, true) ~= nil, true)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "V")
+end
+
+T["FIX operator yank accepts operator-pending field motion"] = function()
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().fn.setreg("", "")
+    nvim().lua([[
+        vim.go.operatorfunc = "v:lua.require'fix'.operator_yank"
+        vim.keymap.set("o", "]}", function()
+            local cursor = vim.api.nvim_win_get_cursor(0)
+            local message = require("fix.document").build_line(0, cursor[1] - 1)
+            local fields = message:list_fields()
+            local matches = {}
+            for _, field in ipairs(fields) do
+                if field.value_end - 1 > cursor[2] then
+                    matches[#matches + 1] = field
+                end
+            end
+            local target = matches[math.min(vim.v.count1, #matches)]
+            vim.api.nvim_win_set_cursor(0, { message.lineno + 1, target.value_end - 1 })
+        end, { buffer = true })
+    ]])
+    nvim().cmd("normal 2G015lg@3]}")
+    local reg = nvim().fn.getreg("")
+    local _, sep_count = reg:gsub("|", "|")
+
+    MiniTest.expect.equality(sep_count, 2)
+    MiniTest.expect.equality(reg:find("MsgType", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("MsgSeqNum", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("SenderCompID", 1, true) ~= nil, true)
+    MiniTest.expect.equality(reg:find("TargetCompID", 1, true), nil)
+    MiniTest.expect.equality(nvim().fn.getregtype(""), "v")
 end
 
 T["FIX browse opens onixs URL with current tag"] = function()
@@ -128,12 +311,12 @@ T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 1)
 end
 
-T["FIX yank field --reg=a writes to register a"] = function()
+T["FIX yank --reg=a writes to register a"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     nvim().cmd("normal! 2G0")
     nvim().fn.setreg("a", "")
     nvim().fn.setreg("", "")
-    nvim().cmd("FIX yank field --reg=a")
+    nvim().cmd("FIX yank --reg=a")
     local reg_a = nvim().fn.getreg("a")
     local reg_unnamed = nvim().fn.getreg("")
     MiniTest.expect.equality(reg_a:find("8", 1, true) ~= nil, true)

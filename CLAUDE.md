@@ -29,7 +29,7 @@ The plugin decorates FIX-message buffers with extmark-based virtual text; it doe
 - `lua/fix/field.lua` / `lua/fix/message.lua` — plain data classes reconstructed from cached semantic tables.
 - `lua/fix/formatters/{tag,value,message}.lua` — default formatters returning `{text, highlight}` (fields) or `{line = {text, highlight}}` (message title). User-supplied formatters must match these shapes; they're invoked from `annotate.lua`.
 - `lua/fix/snacks.lua` — optional picker UI (requires `snacks.nvim`).
-- `lua/fix/yank.lua` — yank helpers used by `:FIX yank field|message [--reg=<r>]`.
+- `lua/fix/yank.lua` — smart yank helpers used by `:FIX yank [--reg=<r>]` and the operatorfunc API.
 - `lua/fix/consts.lua` — `FixVersion` enum used as the canonical internal version key (tree-sitter BeginString strings are mapped to it in `document.lua`).
 - `queries/fix/{highlights,textobjects}.scm` — tree-sitter queries shipped with the plugin.
 - `xml/FIX.*` — vendored FIX Repository data (© FIX Protocol Limited, used under licence — see `plugin/fix.lua` header and `THIRD_PARTY_LICENSES.txt`). Do not regenerate by hand.
