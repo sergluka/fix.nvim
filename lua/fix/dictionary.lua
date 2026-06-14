@@ -31,13 +31,20 @@ local xml2lua = require("xml2lua")
 ---@field fields_path? string
 ---@field enums_path? string
 
+---@alias DictionaryMode "auto"|"repository"|"quickfix"
+---@alias DictionaryConfig string|{path: string, mode?: DictionaryMode, version?: string}
+---@alias DictionaryRegistry table<string, DictionarySource>
+
 ---@class FixDictionaryModule
 ---@field private _cache? table<string, Dictionary>
 ---@field resolve_version fun(version: string): string
 ---@field has_version fun(version: string): boolean
 ---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>): Dictionary
 ---@field load fun(version: string): Dictionary?
----@field register fun(path: string): DictionarySource
+---@field register fun(config: DictionaryConfig): DictionarySource
+---@field prepare fun(dictionaries?: table): DictionaryRegistry
+---@field apply fun(registry: DictionaryRegistry): boolean
+---@field configure fun(dictionaries?: table): DictionaryRegistry
 ---@field clear_cache fun()
 local M = {}
 
@@ -45,7 +52,7 @@ local aliases = {
     ["FIXT.1.1"] = "FIX.5.0SP2",
 }
 
-M._custom = {} ---@type table<string, DictionarySource>
+M._custom = {} ---@type DictionaryRegistry
 
 local function module_dir()
     return debug.getinfo(1, "S").source:sub(2):match("(.*/)")
@@ -139,21 +146,23 @@ local function has_bundled_version(version)
 end
 
 ---@param version string
+---@param custom? DictionaryRegistry
 ---@return DictionarySource?
-local function source_for(version)
+local function source_for(version, custom)
     if type(version) ~= "string" or version == "" then
         return nil
     end
 
-    local custom = M._custom[version]
-    if custom then
-        return custom
+    custom = custom or M._custom
+    local source = custom[version]
+    if source then
+        return source
     end
 
     local resolved = M.resolve_version(version)
-    custom = M._custom[resolved]
-    if custom then
-        return custom
+    source = custom[resolved]
+    if source then
+        return source
     end
 
     if has_bundled_version(resolved) then
@@ -170,9 +179,10 @@ local function source_for(version)
 end
 
 ---@param version string
+---@param custom? DictionaryRegistry
 ---@return boolean
-function M.has_version(version)
-    return source_for(version) ~= nil
+function M.has_version(version, custom)
+    return source_for(version, custom) ~= nil
 end
 
 local function parse_file(path)
@@ -322,47 +332,87 @@ local function normalize_path(path)
     return vim.fn.fnamemodify(vim.fn.expand(path), ":p")
 end
 
+---@param mode any
+---@return DictionaryMode
+local function normalize_mode(mode)
+    mode = mode or "auto"
+    assert(
+        mode == "auto" or mode == "repository" or mode == "quickfix",
+        "dictionary mode must be auto, repository, or quickfix"
+    )
+    return mode
+end
+
+---@param config DictionaryConfig
+---@param explicit_version? string
+---@return string path, DictionaryMode mode, string? version
+local function normalize_config(config, explicit_version)
+    if type(config) == "string" then
+        return config, "auto", explicit_version
+    end
+
+    assert(type(config) == "table", "dictionary entry must be a path string or table")
+    assert(type(config.path) == "string" and config.path ~= "", "dictionary entry must have a non-empty path")
+    local version = explicit_version or config.version
+    if version ~= nil then
+        assert(type(version) == "string" and version ~= "", "dictionary version must be a non-empty string")
+    end
+    return config.path, normalize_mode(config.mode), version
+end
+
 ---@param path string
+---@param explicit_version? string
 ---@return DictionarySource
-local function detect_source(path)
+local function detect_repository_source(path, explicit_version)
     path = normalize_path(path)
     local stat = vim.uv.fs_stat(path)
     assert(stat ~= nil, "dictionary path does not exist: " .. path)
 
-    if stat.type == "directory" then
-        local dir = path:gsub("/+$", "") .. "/"
-        local fields_path = dir .. "Fields.xml"
-        local enums_path = dir .. "Enums.xml"
-        if vim.uv.fs_stat(fields_path) == nil and vim.uv.fs_stat(dir .. "Base/Fields.xml") ~= nil then
-            dir = dir .. "Base/"
-            fields_path = dir .. "Fields.xml"
-            enums_path = dir .. "Enums.xml"
-        end
-        assert(vim.uv.fs_stat(fields_path) ~= nil, "dictionary directory is missing Fields.xml: " .. dir)
-        assert(vim.uv.fs_stat(enums_path) ~= nil, "dictionary directory is missing Enums.xml: " .. dir)
-
-        local fields_xml = parse_file(fields_path)
-        local version = attr(fields_xml.Fields, "version") or path_version(dir)
-        assert(version ~= nil, "cannot detect FIX version for dictionary: " .. dir)
-
-        return {
-            key = "custom:" .. version .. ":" .. dir,
-            version = version,
-            format = "repository",
-            path = dir,
-            fields_path = fields_path,
-            enums_path = enums_path,
-        }
+    if stat.type ~= "directory" then
+        assert(path:match("[/\\]Fields%.xml$"), "repository dictionary mode requires a directory or Fields.xml path")
+        path = vim.fs.dirname(path)
+        stat = vim.uv.fs_stat(path)
+        assert(stat and stat.type == "directory", "dictionary path does not exist: " .. path)
     end
 
-    if path:match("[/\\]Fields%.xml$") then
-        return detect_source(vim.fs.dirname(path))
+    local dir = path:gsub("/+$", "") .. "/"
+    local fields_path = dir .. "Fields.xml"
+    local enums_path = dir .. "Enums.xml"
+    if vim.uv.fs_stat(fields_path) == nil and vim.uv.fs_stat(dir .. "Base/Fields.xml") ~= nil then
+        dir = dir .. "Base/"
+        fields_path = dir .. "Fields.xml"
+        enums_path = dir .. "Enums.xml"
     end
+    assert(vim.uv.fs_stat(fields_path) ~= nil, "dictionary directory is missing Fields.xml: " .. dir)
+    assert(vim.uv.fs_stat(enums_path) ~= nil, "dictionary directory is missing Enums.xml: " .. dir)
+
+    local fields_xml = parse_file(fields_path)
+    local version = explicit_version or attr(fields_xml.Fields, "version") or path_version(dir)
+    assert(version ~= nil, "cannot detect FIX version for dictionary: " .. dir)
+
+    return {
+        key = "custom:" .. version .. ":" .. dir,
+        version = version,
+        format = "repository",
+        path = dir,
+        fields_path = fields_path,
+        enums_path = enums_path,
+    }
+end
+
+---@param path string
+---@param explicit_version? string
+---@return DictionarySource
+local function detect_quickfix_source(path, explicit_version)
+    path = normalize_path(path)
+    local stat = vim.uv.fs_stat(path)
+    assert(stat ~= nil, "dictionary path does not exist: " .. path)
+    assert(stat.type ~= "directory", "quickfix dictionary mode requires an XML file path")
 
     local xml = parse_file(path)
     local root = xml.fix or xml.FIX
     assert(root ~= nil, "custom dictionary file must be a QuickFIX <fix> XML file")
-    local version = quickfix_version(root, path)
+    local version = explicit_version or quickfix_version(root, path)
     assert(version ~= nil, "cannot detect FIX version for dictionary: " .. path)
 
     return {
@@ -373,19 +423,126 @@ local function detect_source(path)
     }
 end
 
----@param path string
+---@param config DictionaryConfig
+---@param explicit_version? string
 ---@return DictionarySource
-function M.register(path)
-    local ok, source = pcall(detect_source, path)
-    if not ok then
-        error("fix.nvim: " .. tostring(source), 2)
+local function detect_source(config, explicit_version)
+    local path, mode, version = normalize_config(config, explicit_version)
+    if mode == "repository" then
+        return detect_repository_source(path, version)
+    elseif mode == "quickfix" then
+        return detect_quickfix_source(path, version)
     end
 
+    local normalized_path = normalize_path(path)
+    local stat = vim.uv.fs_stat(normalized_path)
+    assert(stat ~= nil, "dictionary path does not exist: " .. normalized_path)
+
+    if stat.type == "directory" or normalized_path:match("[/\\]Fields%.xml$") then
+        return detect_repository_source(normalized_path, version)
+    end
+    return detect_quickfix_source(normalized_path, version)
+end
+
+---@param source DictionarySource
+local function assert_loadable(source)
     -- Parse once at registration time so invalid XML fails before caches are
     -- dropped and the UI is re-rendered.
     local parsed_ok, err = pcall(load_source, source)
     if not parsed_ok then
-        error("fix.nvim: failed to load custom dictionary: " .. tostring(err), 2)
+        error("failed to load custom dictionary: " .. tostring(err), 2)
+    end
+end
+
+---@param config DictionaryConfig
+---@param explicit_version? string
+---@return DictionarySource
+local function prepare_source(config, explicit_version)
+    local source = detect_source(config, explicit_version)
+    assert_loadable(source)
+    return source
+end
+
+---@param dictionaries? table
+---@return DictionaryRegistry
+local function prepare_registry(dictionaries)
+    if dictionaries == nil then
+        return {}
+    end
+    assert(type(dictionaries) == "table", "dictionaries must be a table")
+
+    local registry = {}
+    local list_versions = {}
+    local list_keys = {}
+    for key in pairs(dictionaries) do
+        if type(key) == "number" then
+            list_keys[#list_keys + 1] = key
+        end
+    end
+    table.sort(list_keys)
+
+    for _, key in ipairs(list_keys) do
+        local source = prepare_source(dictionaries[key])
+        if list_versions[source.version] then
+            error(
+                string.format(
+                    "multiple dictionaries infer %s; use explicit version keys in setup({ dictionaries = ... })",
+                    source.version
+                ),
+                2
+            )
+        end
+        list_versions[source.version] = true
+        registry[source.version] = source
+    end
+
+    for version, config in pairs(dictionaries) do
+        if type(version) ~= "number" then
+            assert(type(version) == "string" and version ~= "", "dictionary version keys must be non-empty strings")
+            registry[version] = prepare_source(config, version)
+        end
+    end
+
+    return registry
+end
+
+---@param dictionaries? table
+---@return DictionaryRegistry
+function M.prepare(dictionaries)
+    local ok, registry = pcall(prepare_registry, dictionaries)
+    if not ok then
+        error("fix.nvim: " .. tostring(registry), 2)
+    end
+    return registry
+end
+
+---@param registry DictionaryRegistry
+---@return boolean changed
+function M.apply(registry)
+    registry = registry or {}
+    local changed = not vim.deep_equal(M._custom, registry)
+    M._custom = registry
+    if changed then
+        M.clear_cache()
+    end
+    M._fingerprint = nil
+    return changed
+end
+
+---@param dictionaries? table
+---@return DictionaryRegistry
+function M.configure(dictionaries)
+    local registry = M.prepare(dictionaries)
+    M.apply(registry)
+    return registry
+end
+
+---@param config DictionaryConfig
+---@return DictionarySource
+function M.register(config)
+    local ok, source = pcall(prepare_source, config)
+    if not ok then
+        error("fix.nvim: " .. tostring(source), 2)
     end
 
     M._custom[source.version] = source

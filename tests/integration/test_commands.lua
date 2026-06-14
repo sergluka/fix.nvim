@@ -346,6 +346,147 @@ T["FIX dictionary uses Coinbase QuickFIX dictionary"] = function()
     H.expect_inline_label(nvim(), "YES")
 end
 
+T["setup dictionaries uses explicit version key"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    path = "xml/custom/binance/spot-fix-oe.xml",
+                    mode = "quickfix",
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "MessageHandling")
+    H.expect_inline_label(nvim(), "SEQUENTIAL")
+end
+
+T["setup dictionaries list shorthand accepts unique inferred versions"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                "xml/custom/binance/spot-fix-oe.xml",
+                "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+            "8=FIX.4.2|9=0|35=D|34=1|49=A|52=20240627-11:17:25.223|56=B|7928=O|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "MessageHandling")
+    H.expect_inline_label(nvim(), "SEQUENTIAL")
+    H.expect_inline_label(nvim(), "SelfTradePrevention")
+    H.expect_inline_label(nvim(), "CANCEL_OLDEST")
+end
+
+T["setup dictionaries list shorthand rejects duplicate inferred versions"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    "xml/custom/binance/spot-fix-oe.xml",
+                    "xml/custom/binance/spot-fix-md.xml",
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("multiple dictionaries infer FIX%.4%.4") ~= nil, true)
+end
+
+T["setup dictionaries explicit key overrides inferred XML version"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.2"] = "xml/custom/binance/spot-fix-oe.xml",
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.2|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "MessageHandling")
+    H.expect_inline_label(nvim(), "SEQUENTIAL")
+end
+
+T["setup dictionaries can satisfy fallback_version"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            fallback_version = "FIX.9.9",
+            dictionaries = {
+                ["FIX.9.9"] = {
+                    path = "xml/custom/binance/spot-fix-oe.xml",
+                    mode = "quickfix",
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "MessageHandling")
+    H.expect_inline_label(nvim(), "SEQUENTIAL")
+end
+
+T["setup dictionaries rejects invalid mode"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    ["FIX.4.4"] = {
+                        path = "xml/custom/binance/spot-fix-oe.xml",
+                        mode = "invalid",
+                    },
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("dictionary mode must be auto, repository, or quickfix", 1, true) ~= nil, true)
+end
+
+T["setup dictionaries rejects missing path"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    { mode = "quickfix" },
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("dictionary entry must have a non-empty path", 1, true) ~= nil, true)
+end
+
 T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 0)
     nvim().cmd("FIX picker")

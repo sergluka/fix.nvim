@@ -75,11 +75,15 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 `FIX yank` accepts visual ranges and Vim operator targets. Characterwise
 targets yank selected annotated fields; linewise targets yank selected messages.
 
+Custom dictionaries can be configured in `setup()` or registered at runtime
+with `FIX dictionary`. Selection is based on tag `8` (`BeginString`): a custom
+dictionary keyed by that version wins, otherwise the bundled dictionary is used.
+
 `FIX dictionary` accepts a QuickFIX-style XML file or a FIX Repository
 directory containing `Fields.xml` and `Enums.xml`. The dictionary version is
-detected from the XML and replaces the bundled dictionary for that version until
-another custom dictionary is registered for the same version or Neovim exits.
-Examples:
+detected from the XML and replaces the active dictionary for that version until
+another custom dictionary is registered for the same version, `setup()` is run
+again, or Neovim exits. Examples:
 
 ```vim
 :FIX dictionary xml/custom/binance/spot-fix-oe.xml
@@ -94,6 +98,16 @@ Examples:
   -- Examples: "FIX.4.0", "FIX.4.4", "FIX.5.0SP2", "FIXT.1.1".
   -- "FIXT.1.1" resolves through "FIX.5.0SP2".
   fallback_version = "FIX.4.4",
+
+  -- Custom dictionaries keyed by BeginString/FIX version.
+  -- Each version can have one active custom dictionary.
+  dictionaries = {
+    ["FIX.4.4"] = {
+      path = "xml/custom/binance/spot-fix-oe.xml",
+      mode = "quickfix", -- "auto" | "quickfix" | "repository"
+    },
+    ["FIX.4.2"] = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+  },
 
   -- Filetype detection rules passed to vim.filetype.add().
   ft = {
@@ -133,6 +147,10 @@ Examples:
   },
 }
 ```
+
+`dictionaries` may also be a list of paths or `{ path, mode }` entries when
+each entry infers a different FIX version. If two entries infer the same
+version, use explicit version keys as shown above.
 
 Custom formatters should be pure functions of the provided message or field.
 Formatter output is cached by line hash and reused across identical lines and

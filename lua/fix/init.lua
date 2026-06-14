@@ -39,6 +39,7 @@
 ---@field render.lines_per_batch? number
 ---@field render.viewport_margin? number
 ---@field fallback_version? string
+---@field dictionaries? table<string|integer, string|{path: string, mode?: "auto"|"repository"|"quickfix", version?: string}>
 
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
@@ -55,6 +56,7 @@ local M = {}
 
 local default_settings = {
     fallback_version = Consts.FixVersion.FIX_4_4,
+    dictionaries = {},
     ft = {
         extensions = { "fix", "fixlog" },
         pattern = { ".*%.fix.txt" },
@@ -90,9 +92,10 @@ local default_settings = {
 }
 
 ---@param opts FixOpts
-local function validate_opts(opts)
-    if not Dictionary.has_version(opts.fallback_version) then
-        error("fix.nvim: fallback_version has no bundled dictionary: " .. tostring(opts.fallback_version), 2)
+---@param dictionaries? table
+local function validate_opts(opts, dictionaries)
+    if not Dictionary.has_version(opts.fallback_version, dictionaries) then
+        error("fix.nvim: fallback_version has no dictionary: " .. tostring(opts.fallback_version), 2)
     end
 
     local persist = opts.cache.persist
@@ -180,17 +183,23 @@ end
 function M.setup(opts)
     local prev_opts = M.opts
     local next_opts = vim.tbl_deep_extend("force", default_settings, opts or {})
-    validate_opts(next_opts)
+    local dictionaries = Dictionary.prepare(next_opts.dictionaries)
+    validate_opts(next_opts, dictionaries)
 
     local is_resetup = prev_opts ~= nil
     M.opts = next_opts
     M.opts_initial = vim.deepcopy(M.opts)
+    local dictionaries_changed = Dictionary.apply(dictionaries)
 
     register_filetype()
     register_autocmds()
 
     if is_resetup then
-        if prev_opts.fallback_version == M.opts.fallback_version then
+        if
+            prev_opts.fallback_version == M.opts.fallback_version
+            and vim.deep_equal(prev_opts.dictionaries, M.opts.dictionaries)
+            and not dictionaries_changed
+        then
             Cache.drop_render()
         else
             Cache.clear()
