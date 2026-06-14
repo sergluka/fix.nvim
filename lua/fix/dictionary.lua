@@ -19,9 +19,21 @@ local xml2lua = require("xml2lua")
 ---@field name string
 ---@field description string
 
+---@class FixTagDecodeContext
+---@field version string
+---@field fields Field[]
+---@field dictionary Dictionary
+
+---@class FixTagDecodeResult
+---@field tag_text? string
+---@field value_text? string
+
+---@alias FixTagDecoder fun(field: Field, ctx: FixTagDecodeContext): FixTagDecodeResult|nil
+
 ---@class Dictionary
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>
+---@field private _tags     table<integer, FixTagDecoder>
 
 ---@class DictionarySource
 ---@field key string
@@ -30,16 +42,24 @@ local xml2lua = require("xml2lua")
 ---@field path string
 ---@field fields_path? string
 ---@field enums_path? string
+---@field tags? table<integer, FixTagDecoder>
+---@field tags_fingerprint? string
 
 ---@alias DictionaryMode "auto"|"repository"|"quickfix"
----@alias DictionaryConfig string|{path: string, mode?: DictionaryMode, version?: string}
+---@class DictionaryConfigSpec
+---@field path? string
+---@field mode? DictionaryMode
+---@field version? string
+---@field tags? table<integer|string, FixTagDecoder>
+
+---@alias DictionaryConfig string|DictionaryConfigSpec
 ---@alias DictionaryRegistry table<string, DictionarySource>
 
 ---@class FixDictionaryModule
 ---@field private _cache? table<string, Dictionary>
 ---@field resolve_version fun(version: string): string
 ---@field has_version fun(version: string): boolean
----@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>): Dictionary
+---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>, tags?: table<integer, FixTagDecoder>): Dictionary
 ---@field load fun(version: string): Dictionary?
 ---@field register fun(config: DictionaryConfig): DictionarySource
 ---@field prepare fun(dictionaries?: table): DictionaryRegistry
@@ -145,6 +165,51 @@ local function has_bundled_version(version)
     return vim.uv.fs_stat(dir .. "Fields.xml") ~= nil and vim.uv.fs_stat(dir .. "Enums.xml") ~= nil
 end
 
+---@param tags table<integer, FixTagDecoder>|nil
+---@return string|nil
+local function tag_decoders_fingerprint(tags)
+    if not tags then
+        return nil
+    end
+
+    local parts = {}
+    for tag, decoder in pairs(tags) do
+        parts[#parts + 1] = tostring(tag) .. ":" .. tostring(decoder)
+    end
+    table.sort(parts)
+    return table.concat(parts, ",")
+end
+
+---@param version string
+---@param tags table<integer, FixTagDecoder>|nil
+---@param tags_fingerprint string|nil
+---@return DictionarySource?
+local function bundled_source(version, tags, tags_fingerprint)
+    local resolved = M.resolve_version(version)
+    if not has_bundled_version(resolved) then
+        return nil
+    end
+
+    local dir = base_path(resolved)
+    local key = "bundled:" .. resolved
+    local source_version = resolved
+    if tags then
+        source_version = version
+        key = "custom:" .. version .. ":bundled:" .. resolved .. ":" .. (tags_fingerprint or "")
+    end
+
+    return {
+        key = key,
+        version = source_version,
+        format = "repository",
+        path = dir,
+        fields_path = dir .. "Fields.xml",
+        enums_path = dir .. "Enums.xml",
+        tags = tags,
+        tags_fingerprint = tags_fingerprint,
+    }
+end
+
 ---@param version string
 ---@param custom? DictionaryRegistry
 ---@return DictionarySource?
@@ -165,17 +230,7 @@ local function source_for(version, custom)
         return source
     end
 
-    if has_bundled_version(resolved) then
-        local dir = base_path(resolved)
-        return {
-            key = "bundled:" .. resolved,
-            version = resolved,
-            format = "repository",
-            path = dir,
-            fields_path = dir .. "Fields.xml",
-            enums_path = dir .. "Enums.xml",
-        }
-    end
+    return bundled_source(version)
 end
 
 ---@param version string
@@ -292,10 +347,11 @@ local function load_source(source)
     return load_fields(source.path, "Fields.xml"), load_enums(source.path, "Enums.xml")
 end
 
-function M.new(fields, enums)
+function M.new(fields, enums, tags)
     local self = {
         _fields = fields or {},
         _enums = enums or {},
+        _tags = tags or {},
     }
     setmetatable(self, { __index = M }) -- __index is set here
     return self
@@ -322,7 +378,7 @@ function M.load(version)
     vim.notify("fix.nvim: Loading FIX dictionary for version " .. source.version, vim.log.levels.DEBUG)
 
     local fields, enums = load_source(source)
-    local dict = M.new(fields, enums)
+    local dict = M.new(fields, enums, source.tags)
     M._cache[source.key] = dict
 
     return dict
@@ -343,21 +399,49 @@ local function normalize_mode(mode)
     return mode
 end
 
+---@param tags any
+---@return table<integer, FixTagDecoder>|nil
+local function normalize_tags(tags)
+    if tags == nil then
+        return nil
+    end
+    assert(type(tags) == "table", "dictionary tags must be a table")
+
+    local normalized = {}
+    for tag, decoder in pairs(tags) do
+        local tag_number = tonumber(tag)
+        assert(
+            tag_number ~= nil and tag_number > 0 and tag_number % 1 == 0,
+            "dictionary tag keys must be positive integers"
+        )
+        assert(type(decoder) == "function", "dictionary tag decoder for " .. tostring(tag) .. " must be a function")
+        normalized[tag_number] = decoder
+    end
+    return normalized
+end
+
 ---@param config DictionaryConfig
 ---@param explicit_version? string
----@return string path, DictionaryMode mode, string? version
+---@return string? path
+---@return DictionaryMode mode
+---@return string? version
+---@return table<integer, FixTagDecoder>? tags
 local function normalize_config(config, explicit_version)
     if type(config) == "string" then
-        return config, "auto", explicit_version
+        return config, "auto", explicit_version, nil
     end
 
     assert(type(config) == "table", "dictionary entry must be a path string or table")
-    assert(type(config.path) == "string" and config.path ~= "", "dictionary entry must have a non-empty path")
+    if config.path == nil then
+        assert(config.tags ~= nil, "dictionary entry must have a non-empty path")
+    else
+        assert(type(config.path) == "string" and config.path ~= "", "dictionary entry must have a non-empty path")
+    end
     local version = explicit_version or config.version
     if version ~= nil then
         assert(type(version) == "string" and version ~= "", "dictionary version must be a non-empty string")
     end
-    return config.path, normalize_mode(config.mode), version
+    return config.path, normalize_mode(config.mode), version, normalize_tags(config.tags)
 end
 
 ---@param path string
@@ -427,21 +511,39 @@ end
 ---@param explicit_version? string
 ---@return DictionarySource
 local function detect_source(config, explicit_version)
-    local path, mode, version = normalize_config(config, explicit_version)
+    local path, mode, version, tags = normalize_config(config, explicit_version)
+    local tags_fingerprint = tag_decoders_fingerprint(tags)
+
+    if path == nil then
+        assert(version ~= nil, "dictionary entry without path requires an explicit version")
+        local source = bundled_source(version, tags, tags_fingerprint)
+        assert(source ~= nil, "dictionary entry without path requires a bundled dictionary for " .. version)
+        return source
+    end
+
+    local source
     if mode == "repository" then
-        return detect_repository_source(path, version)
+        source = detect_repository_source(path, version)
     elseif mode == "quickfix" then
-        return detect_quickfix_source(path, version)
+        source = detect_quickfix_source(path, version)
+    else
+        local normalized_path = normalize_path(path)
+        local stat = vim.uv.fs_stat(normalized_path)
+        assert(stat ~= nil, "dictionary path does not exist: " .. normalized_path)
+
+        if stat.type == "directory" or normalized_path:match("[/\\]Fields%.xml$") then
+            source = detect_repository_source(normalized_path, version)
+        else
+            source = detect_quickfix_source(normalized_path, version)
+        end
     end
 
-    local normalized_path = normalize_path(path)
-    local stat = vim.uv.fs_stat(normalized_path)
-    assert(stat ~= nil, "dictionary path does not exist: " .. normalized_path)
-
-    if stat.type == "directory" or normalized_path:match("[/\\]Fields%.xml$") then
-        return detect_repository_source(normalized_path, version)
+    source.tags = tags
+    source.tags_fingerprint = tags_fingerprint
+    if tags then
+        source.key = source.key .. ":tags:" .. (tags_fingerprint or "")
     end
-    return detect_quickfix_source(normalized_path, version)
+    return source
 end
 
 ---@param source DictionarySource
@@ -583,6 +685,9 @@ function M.fingerprint()
 
     for version, source in pairs(M._custom) do
         parts[#parts + 1] = string.format("custom:%s:%s:%s", version, source.format, source.path)
+        if source.tags_fingerprint then
+            parts[#parts + 1] = string.format("custom-tags:%s:%s", version, source.tags_fingerprint)
+        end
         if source.format == "repository" then
             parts[#parts + 1] = fingerprint_part(source.fields_path)
             parts[#parts + 1] = fingerprint_part(source.enums_path)
@@ -594,6 +699,55 @@ function M.fingerprint()
     table.sort(parts)
     M._fingerprint = vim.fn.sha256(table.concat(parts, ";")):sub(1, 16)
     return M._fingerprint
+end
+
+---@param field Field
+---@param decoded any
+local function apply_decode_result(field, decoded)
+    if decoded == nil then
+        return
+    end
+    if type(decoded) ~= "table" then
+        vim.notify_once("fix.nvim: custom tag decoder returned non-table result", vim.log.levels.ERROR)
+        return
+    end
+
+    for _, key in ipairs({ "tag_text", "value_text" }) do
+        local value = decoded[key]
+        if value ~= nil then
+            if type(value) ~= "string" then
+                vim.notify_once("fix.nvim: custom tag decoder returned non-string " .. key, vim.log.levels.ERROR)
+            else
+                field[key] = value
+            end
+        end
+    end
+end
+
+---@param field Field
+---@param ctx FixTagDecodeContext
+function M:decode(field, ctx)
+    local field_def = self:field(field.tag)
+    if field_def then
+        field.tag_text = field_def.name
+    end
+
+    local enum_def = self:enum(field.tag, field.value)
+    if enum_def then
+        field.value_text = enum_def.name
+    end
+
+    local decoder = self._tags[field.tag]
+    if not decoder then
+        return
+    end
+
+    local ok, decoded = pcall(decoder, field, ctx)
+    if not ok then
+        vim.notify_once("fix.nvim: custom tag decoder failed: " .. tostring(decoded), vim.log.levels.ERROR)
+        return
+    end
+    apply_decode_result(field, decoded)
 end
 
 ---@param tag integer

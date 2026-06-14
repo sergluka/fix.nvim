@@ -91,15 +91,9 @@ local function decode(semantic)
     if not dict then
         return
     end
+    local ctx = { version = semantic.version, fields = semantic.fields, dictionary = dict }
     for _, field in ipairs(semantic.fields) do
-        local field_def = dict:field(field.tag)
-        if field_def then
-            field.tag_text = field_def.name
-        end
-        local enum_def = dict:enum(field.tag, field.value)
-        if enum_def then
-            field.value_text = enum_def.name
-        end
+        dict:decode(field, ctx)
     end
 end
 

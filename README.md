@@ -101,10 +101,20 @@ again, or Neovim exits. Examples:
 
   -- Custom dictionaries keyed by BeginString/FIX version.
   -- Each version can have one active custom dictionary.
+  -- `tags` can be used with or without `path` to add Lua decoders.
   dictionaries = {
     ["FIX.4.4"] = {
       path = "xml/custom/binance/spot-fix-oe.xml",
       mode = "quickfix", -- "auto" | "quickfix" | "repository"
+      ---@type table<integer, FixTagDecoder>
+      tags = {
+        [25035] = function(field, _ctx)
+          return {
+            tag_text = "MessageHandling",
+            value_text = ({ ["1"] = "UNORDERED", ["2"] = "SEQUENTIAL" })[field.value],
+          }
+        end,
+      },
     },
     ["FIX.4.2"] = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
   },
@@ -151,6 +161,13 @@ again, or Neovim exits. Examples:
 `dictionaries` may also be a list of paths or `{ path, mode }` entries when
 each entry infers a different FIX version. If two entries infer the same
 version, use explicit version keys as shown above.
+
+Custom tag decoders receive the parsed `field` after XML dictionary lookup and
+`ctx = { version, fields, dictionary }`. Return `tag_text` and/or `value_text`
+to replace the XML-derived annotation text; return `nil` for either key to keep
+the existing value. A pathless entry such as `dictionaries["FIX.4.4"] =
+{ tags = ... }` overlays the bundled dictionary for that version. The
+`FixTagDecoder` alias is available for LuaLS annotations.
 
 Custom formatters should be pure functions of the provided message or field.
 Formatter output is cached by line hash and reused across identical lines and

@@ -77,4 +77,164 @@ T["SOH-delimited fixture renders with conceallevel=1"] = function()
     H.expect_inline_label(nvim(), "BeginString")
 end
 
+T["custom tags overlay bundled dictionary and decode unknown tag"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [5001] = function(field)
+                            return {
+                                tag_text = "VenueOrderState",
+                                value_text = ({ A = "Accepted" })[field.value],
+                            }
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=20|35=D|49=A|56=B|5001=A|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "VenueOrderState")
+    H.expect_inline_label(nvim(), "Accepted")
+    H.expect_inline_label(nvim(), "BeginString")
+end
+
+T["custom tag decoder overrides XML tag and enum text"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [35] = function()
+                            return { tag_text = "VenueMsgType", value_text = "VenueOrder" }
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=20|35=D|49=A|56=B|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "VenueMsgType")
+    H.expect_inline_label(nvim(), "VenueOrder")
+    H.expect_no_inline_label(nvim(), "MsgType")
+    H.expect_no_inline_label(nvim(), "NewOrderSingle")
+end
+
+T["custom tag decoder partial result preserves XML value text"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [35] = function()
+                            return { tag_text = "OnlyTagOverride" }
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=20|35=D|49=A|56=B|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "OnlyTagOverride")
+    H.expect_inline_label(nvim(), "NewOrderSingle")
+    H.expect_no_inline_label(nvim(), "MsgType")
+end
+
+T["custom tag decoder failure is reported without aborting render"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [5002] = function()
+                            error("decoder exploded")
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=20|35=D|49=A|56=B|5002=X|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "BeginString")
+    H.expect_notified(nvim(), "custom tag decoder failed")
+end
+
+T["custom tag setup change clears semantic cache"] = function()
+    nvim().lua([[
+        _G._custom_tag_label = "FirstCustomLabel"
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [5003] = function()
+                            return { tag_text = _G._custom_tag_label }
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    nvim().cmd("enew")
+    nvim().lua([[
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+            "8=FIX.4.4|9=20|35=D|49=A|56=B|5003=X|10=000|",
+        })
+    ]])
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+    H.expect_inline_label(nvim(), "FirstCustomLabel")
+
+    nvim().lua([[
+        _G._custom_tag_label = "SecondCustomLabel"
+        require("fix").setup({
+            dictionaries = {
+                ["FIX.4.4"] = {
+                    tags = {
+                        [5003] = function()
+                            return { tag_text = _G._custom_tag_label }
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    H.wait_annotated(nvim())
+
+    H.expect_inline_label(nvim(), "SecondCustomLabel")
+    H.expect_no_inline_label(nvim(), "FirstCustomLabel")
+end
+
 return T

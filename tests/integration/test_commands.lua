@@ -487,6 +487,63 @@ T["setup dictionaries rejects missing path"] = function()
     MiniTest.expect.equality(err:find("dictionary entry must have a non-empty path", 1, true) ~= nil, true)
 end
 
+T["setup dictionaries rejects invalid custom tags table"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    ["FIX.4.4"] = {
+                        tags = "not-a-table",
+                    },
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("dictionary tags must be a table", 1, true) ~= nil, true)
+end
+
+T["setup dictionaries rejects non-function custom tag decoder"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    ["FIX.4.4"] = {
+                        tags = {
+                            [5001] = "not-a-function",
+                        },
+                    },
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("dictionary tag decoder for 5001 must be a function", 1, true) ~= nil, true)
+end
+
+T["setup dictionaries rejects pathless custom tags without version"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({
+                dictionaries = {
+                    {
+                        tags = {
+                            [5001] = function()
+                                return { tag_text = "Custom" }
+                            end,
+                        },
+                    },
+                },
+            })
+        end))
+    ]])
+
+    MiniTest.expect.equality(
+        err:find("dictionary entry without path requires an explicit version", 1, true) ~= nil,
+        true
+    )
+end
+
 T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 0)
     nvim().cmd("FIX picker")

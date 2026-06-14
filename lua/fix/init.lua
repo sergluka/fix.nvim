@@ -1,6 +1,5 @@
 -- TODO: support groups
 -- TODO: formatting for sender/receiver
--- TODO: add option for custom tags
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
@@ -39,9 +38,10 @@
 ---@field dictionaries? table<string|integer, string|FixDictionarySpec>
 
 ---@class FixDictionarySpec
----@field path string
+---@field path? string
 ---@field mode? "auto"|"repository"|"quickfix"
 ---@field version? string
+---@field tags? table<number|string, FixTagDecoder>
 
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
