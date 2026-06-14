@@ -36,7 +36,12 @@
 ---@field render.lines_per_batch? number
 ---@field render.viewport_margin? number
 ---@field fallback_version? string
----@field dictionaries? table<string|integer, string|{path: string, mode?: "auto"|"repository"|"quickfix", version?: string}>
+---@field dictionaries? table<string|integer, string|FixDictionarySpec>
+
+---@class FixDictionarySpec
+---@field path string
+---@field mode? "auto"|"repository"|"quickfix"
+---@field version? string
 
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
