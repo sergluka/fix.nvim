@@ -4,9 +4,6 @@
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
--- TODO: docs: Explain issue about 0th line [https://github.com/neovim/neovim/issues/16166]
--- TODO: vimdoc
--- TODO: CI: busted, linter
 -- TODO: yank in picker
 -- TODO: highlight values based on Type
 
