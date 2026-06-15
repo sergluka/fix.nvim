@@ -5,6 +5,7 @@ local Field = require("fix.field")
 local Message = require("fix.message")
 
 local M = {}
+local FixTag = Consts.FixTag
 
 local versions = {
     ["FIX.2.7"] = Consts.FixVersion.FIX_2_7,
@@ -28,19 +29,22 @@ end
 local function get_version(fields)
     local begin_string
     for _, field in ipairs(fields) do
-        if field.tag == 8 then
+        if field.tag == FixTag.BeginString then
             begin_string = field.value
             break
         end
     end
     if not begin_string then
-        vim.notify_once("Missing BeginString (tag 8)", vim.log.levels.WARN)
+        vim.notify_once(string.format("Missing BeginString (tag %d)", FixTag.BeginString), vim.log.levels.WARN)
         return nil
     end
 
     local version = versions[begin_string]
     if not version then
-        vim.notify_once("Unknown BeginString (tag 8): " .. begin_string, vim.log.levels.WARN)
+        vim.notify_once(
+            string.format("Unknown BeginString (tag %d): %s", FixTag.BeginString, begin_string),
+            vim.log.levels.WARN
+        )
         return nil
     end
 

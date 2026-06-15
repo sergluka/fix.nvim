@@ -1,11 +1,13 @@
+local Consts = require("fix.consts")
 local document = require("fix.document")
 
 local M = {}
+local FixTag = Consts.FixTag
 
 local function append_message_items(items, message, message_idx, file)
-    local msg_type = message:field(35).value_text
-    local sender = message:field(49).value
-    local seq_no = message:field(34).value
+    local msg_type = message:field(FixTag.MsgType).value_text
+    local sender = message:field(FixTag.SenderCompID).value
+    local seq_no = message:field(FixTag.MsgSeqNum).value
 
     for _, field in pairs(message:list_fields()) do
         local text = string.format(
@@ -73,9 +75,9 @@ function M.open()
         format = function(item, _)
             local field = item.field
             local message = item.message
-            local msg_type = message:field(35)
-            local sender = message:field(49).value
-            local seq_no = message:field(34).value
+            local msg_type = message:field(FixTag.MsgType)
+            local sender = message:field(FixTag.SenderCompID).value
+            local seq_no = message:field(FixTag.MsgSeqNum).value
 
             local ret = {}
             ret[#ret + 1] = { string.format("#%s %s => %s ", seq_no, sender, msg_type.value_text), "Comment" }
