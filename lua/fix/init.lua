@@ -3,7 +3,6 @@
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
--- TODO: yank in picker
 -- TODO: highlight values based on Type
 
 ---@class FixOpts
@@ -91,7 +90,7 @@ local default_settings = {
 }
 
 ---@param opts FixOpts
----@param dictionaries? table
+---@param dictionaries? DictionaryRegistry
 local function validate_opts(opts, dictionaries)
     if not Dictionary.has_version(opts.fallback_version, dictionaries) then
         error("fix.nvim: fallback_version has no dictionary: " .. tostring(opts.fallback_version), 2)

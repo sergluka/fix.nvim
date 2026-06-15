@@ -58,7 +58,7 @@ local xml2lua = require("xml2lua")
 ---@class FixDictionaryModule
 ---@field private _cache? table<string, Dictionary>
 ---@field resolve_version fun(version: string): string
----@field has_version fun(version: string): boolean
+---@field has_version fun(version: string, custom?: DictionaryRegistry): boolean
 ---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>, tags?: table<integer, FixTagDecoder>): Dictionary
 ---@field load fun(version: string): Dictionary?
 ---@field register fun(config: DictionaryConfig): DictionarySource
