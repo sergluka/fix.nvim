@@ -6,13 +6,14 @@ local FixTag = Consts.FixTag
 --- @param message Message
 function M.default(message)
     local msg_type_name = message:field(FixTag.MsgType).value_text or "Unknown"
+    local route = message:route()
 
     local text = string.format(
         "%s: %s: %s=>%s | %s",
         message:field(FixTag.SendingTime).value or "???",
         message:field(FixTag.MsgSeqNum).value or "???",
-        message:field(FixTag.SenderCompID).value or "???",
-        message:field(FixTag.TargetCompID).value or "???",
+        route.sender,
+        route.target,
         message:field(FixTag.MsgType).value_text or "???"
     )
 
@@ -56,7 +57,7 @@ function M.default(message)
         end
     end
 
-    local title = { { text .. " | ", "Title" } }
+    local title = { { text .. " | ", message:route_highlight() } }
     if details ~= "" then
         title[#title + 1] = { details .. " | ", "Repeat" }
     end

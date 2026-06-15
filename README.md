@@ -137,6 +137,24 @@ again, or Neovim exits. Examples:
     message = {
       enabled = true,
       position = "above", -- "above" | "below" | "front"
+      route = {
+        enabled = true,
+        mode = "direction", -- "direction" | "sender" | "pair"
+        palette = {
+          "FixRoute1",
+          "FixRoute2",
+          "FixRoute3",
+          "FixRoute4",
+          "FixRoute5",
+          "FixRoute6",
+          "FixRoute7",
+          "FixRoute8",
+        },
+        overrides = {
+          -- { sender = "CLIENT1", target = "*", highlight = "FixClientSend" },
+        },
+        resolver = nil, -- function(route, message) return "HighlightGroup" end
+      },
       formatter = require("fix.formatters.message").default,
     },
   },
@@ -173,6 +191,19 @@ Custom formatters should be pure functions of the provided message or field.
 Formatter output is cached by line hash and reused across identical lines and
 buffers, so formatters that read `message.lineno`, buffer state, or other
 external state can produce stale annotations.
+
+Message formatters can reuse route styling without depending on the default
+`sender=>target` title text:
+
+```lua
+formatter = function(message)
+  local route = message:route()
+  return { { { route.sender .. " to " .. route.target, message:route_highlight() } } }
+end
+```
+
+Route override rules match structured FIX tag values from `49` and `56`, not
+the rendered title string. Use `*` as a wildcard for either side.
 
 The persistent cache lives at `stdpath("cache")/fix.nvim` unless
 `cache.persist.dir` is set. Set `cache.persist.enabled = false` to keep all

@@ -157,6 +157,24 @@ These are the defaults:
         message = {
           enabled = true,
           position = "above", -- "above" | "below" | "front"
+          route = {
+            enabled = true,
+            mode = "direction", -- "direction" | "sender" | "pair"
+            palette = {
+              "FixRoute1",
+              "FixRoute2",
+              "FixRoute3",
+              "FixRoute4",
+              "FixRoute5",
+              "FixRoute6",
+              "FixRoute7",
+              "FixRoute8",
+            },
+            overrides = {
+              -- { sender = "CLIENT1", target = "*", highlight = "FixClientSend" },
+            },
+            resolver = nil, -- function(route, message) return "HighlightGroup" end
+          },
           formatter = require("fix.formatters.message").default,
         },
       },
@@ -192,8 +210,20 @@ Field formatters return:
 <
 Message formatters return:
 >
-    { line = { text = "display text", highlight = "HighlightGroup" } }
+    { { { "display text", "HighlightGroup" } } }
 <
+Message formatters may also call:
+>
+    message:route()
+    message:route_key()
+    message:route_highlight()
+<
+`message:route()` returns `{ sender, target }` from FIX tags `49` and `56`.
+`message:route_highlight()` applies structured route rules and deterministic
+palette fallback, so custom formatters can reuse route colors without using the
+default `sender=>target` text. Route `overrides` match structured values; use
+`*` as a wildcard for `sender` or `target`.
+
                                                    *fix.nvim-cache*
 The persistent cache lives at `stdpath("cache")/fix.nvim` unless
 `cache.persist.dir` is set. Set `cache.persist.enabled = false` to keep all

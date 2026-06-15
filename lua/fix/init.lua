@@ -1,5 +1,4 @@
 -- TODO: support groups
--- TODO: formatting for sender/receiver
 -- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
@@ -19,7 +18,13 @@
 ---@field annotate.message? table
 ---@field annotate.message.enabled? boolean
 ---@field annotate.message.position? string "above" | "below" | "front"
----@field annotate.message.formatter? fun(message: Message): {line: {text: string, highlight: string}}
+---@field annotate.message.route? table
+---@field annotate.message.route.enabled? boolean
+---@field annotate.message.route.mode? string "direction" | "sender" | "pair"
+---@field annotate.message.route.palette? string[]
+---@field annotate.message.route.overrides? FixRouteRule[]
+---@field annotate.message.route.resolver? fun(route: FixRoute, message: Message): string|nil
+---@field annotate.message.formatter? fun(message: Message): table
 ---@field cache? table
 ---@field cache.persist? table
 ---@field cache.persist.enabled? boolean
@@ -71,6 +76,22 @@ local default_settings = {
         message = {
             enabled = true,
             position = "above",
+            route = {
+                enabled = true,
+                mode = "direction",
+                palette = {
+                    "FixRoute1",
+                    "FixRoute2",
+                    "FixRoute3",
+                    "FixRoute4",
+                    "FixRoute5",
+                    "FixRoute6",
+                    "FixRoute7",
+                    "FixRoute8",
+                },
+                overrides = {},
+                resolver = nil,
+            },
             formatter = MessageFormatter.default,
         },
     },
@@ -113,6 +134,105 @@ local function validate_opts(opts, dictionaries)
 
     if persist.enabled and persist.max_files == false and persist.max_bytes == false then
         error("fix.nvim: cache.persist.max_files and max_bytes cannot both be false when persistence is enabled", 2)
+    end
+
+    local route = opts.annotate.message.route
+    if route.mode ~= "direction" and route.mode ~= "sender" and route.mode ~= "pair" then
+        error("fix.nvim: annotate.message.route.mode must be 'direction', 'sender', or 'pair'", 2)
+    end
+    if type(route.palette) ~= "table" or #route.palette == 0 then
+        error("fix.nvim: annotate.message.route.palette must contain at least one highlight group", 2)
+    end
+    for _, group in ipairs(route.palette) do
+        if type(group) ~= "string" or group == "" then
+            error("fix.nvim: annotate.message.route.palette must contain highlight group names", 2)
+        end
+    end
+    if type(route.overrides) ~= "table" then
+        error("fix.nvim: annotate.message.route.overrides must be a list", 2)
+    end
+    for _, rule in ipairs(route.overrides) do
+        if type(rule) ~= "table" then
+            error("fix.nvim: annotate.message.route.overrides entries must be tables", 2)
+        end
+        if rule.sender ~= nil and type(rule.sender) ~= "string" then
+            error("fix.nvim: annotate.message.route.overrides sender must be a string", 2)
+        end
+        if rule.target ~= nil and type(rule.target) ~= "string" then
+            error("fix.nvim: annotate.message.route.overrides target must be a string", 2)
+        end
+        if type(rule.highlight) ~= "string" or rule.highlight == "" then
+            error("fix.nvim: annotate.message.route.overrides highlight must be a highlight group", 2)
+        end
+    end
+    if route.resolver ~= nil and type(route.resolver) ~= "function" then
+        error("fix.nvim: annotate.message.route.resolver must be a function", 2)
+    end
+end
+
+local route_highlight_palettes = {
+    dark = {
+        FixRoute1 = { fg = "#4da3ff", bold = true },
+        FixRoute2 = { fg = "#3ecf5f", bold = true },
+        FixRoute3 = { fg = "#ffb02e", bold = true },
+        FixRoute4 = { fg = "#c678ff", bold = true },
+        FixRoute5 = { fg = "#00c8d7", bold = true },
+        FixRoute6 = { fg = "#ff5f7a", bold = true },
+        FixRoute7 = { fg = "#f0f3ff", bold = true },
+        FixRoute8 = { fg = "#ff7a18", bold = true },
+    },
+    light = {
+        FixRoute1 = { fg = "#005fcb", bold = true },
+        FixRoute2 = { fg = "#007a33", bold = true },
+        FixRoute3 = { fg = "#8a5200", bold = true },
+        FixRoute4 = { fg = "#7a2ebf", bold = true },
+        FixRoute5 = { fg = "#007c89", bold = true },
+        FixRoute6 = { fg = "#b00030", bold = true },
+        FixRoute7 = { fg = "#334155", bold = true },
+        FixRoute8 = { fg = "#a13f00", bold = true },
+    },
+}
+
+---@param spec table
+---@return number|nil
+local function highlight_fg(spec)
+    local fg = spec.fg
+    if type(fg) ~= "string" or fg:sub(1, 1) ~= "#" then
+        return nil
+    end
+    return tonumber(fg:sub(2), 16)
+end
+
+---@param current table
+---@param spec table
+---@return boolean
+local function same_highlight(current, spec)
+    return current.fg == highlight_fg(spec) and current.bold == spec.bold
+end
+
+---@param current table
+---@return boolean
+local function is_default_route_highlight(current)
+    if vim.tbl_isempty(current) then
+        return true
+    end
+    for _, palette in pairs(route_highlight_palettes) do
+        for _, spec in pairs(palette) do
+            if same_highlight(current, spec) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function register_highlights()
+    local route_highlights = route_highlight_palettes[vim.o.background] or route_highlight_palettes.dark
+    for group, spec in pairs(route_highlights) do
+        local current = vim.api.nvim_get_hl(0, { name = group, link = false })
+        if is_default_route_highlight(current) then
+            vim.api.nvim_set_hl(0, group, spec)
+        end
     end
 end
 
@@ -175,6 +295,17 @@ local function register_autocmds()
             Render.flush_all_sync()
         end,
     })
+
+    vim.api.nvim_create_autocmd("ColorScheme", {
+        group = group,
+        callback = register_highlights,
+    })
+
+    vim.api.nvim_create_autocmd("OptionSet", {
+        group = group,
+        pattern = "background",
+        callback = register_highlights,
+    })
 end
 
 ---@param opts FixOpts
@@ -189,6 +320,7 @@ function M.setup(opts)
     M.opts_initial = vim.deepcopy(M.opts)
     local dictionaries_changed = Dictionary.apply(dictionaries)
 
+    register_highlights()
     register_filetype()
     register_autocmds()
 

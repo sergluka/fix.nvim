@@ -4,6 +4,38 @@ local MiniTest = require("mini.test")
 local T = H.new_test_set()
 local nvim = H.nvim
 
+local function set_fix_lines(lines)
+    nvim().cmd("enew")
+    nvim().lua("vim.api.nvim_buf_set_lines(0, 0, -1, false, " .. vim.inspect(lines) .. ")")
+    nvim().cmd("set filetype=fix")
+    H.wait_annotated(nvim())
+end
+
+local function first_title_chunks()
+    local chunks = {}
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.details.virt_lines then
+            local line = mark.details.virt_lines[1]
+            if line then
+                chunks[#chunks + 1] = line
+            end
+        elseif mark.col == 0 and mark.details.virt_text_pos == "inline" then
+            chunks[#chunks + 1] = mark.details.virt_text
+        end
+    end
+    return chunks
+end
+
+local function first_title_highlights()
+    local highlights = {}
+    for _, chunks in ipairs(first_title_chunks()) do
+        if chunks[1] then
+            highlights[#highlights + 1] = chunks[1][2]
+        end
+    end
+    return highlights
+end
+
 T["4.4.fix tag extmarks contain field names"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_inline_label(nvim(), "BeginString")
@@ -48,7 +80,14 @@ T["position=front renders title as inline text at column zero"] = function()
     local front_titles = 0
     for _, m in ipairs(H.get_extmarks(nvim())) do
         local vt = m.details.virt_text
-        if m.col == 0 and m.details.virt_text_pos == "inline" and vt and vt[1] and vt[1][2] == "Title" then
+        if
+            m.col == 0
+            and m.details.virt_text_pos == "inline"
+            and vt
+            and vt[1]
+            and type(vt[1][2]) == "string"
+            and vt[1][2]:match("^FixRoute")
+        then
             front_titles = front_titles + 1
         end
     end
@@ -56,6 +95,150 @@ T["position=front renders title as inline text at column zero"] = function()
     MiniTest.expect.equality(front_titles, 2)
     H.expect_inline_label(nvim(), "BeginString")
     H.expect_inline_label(nvim(), "MsgType")
+end
+
+T["route title highlights distinguish opposite directions"] = function()
+    set_fix_lines({
+        "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|10=198|",
+        "8=FIX.4.4|9=70|35=0|34=2|49=BROKER1|56=CLIENT1|52=20251026-09:02:00.010|10=075|",
+    })
+
+    local highlights = first_title_highlights()
+    MiniTest.expect.equality(#highlights, 2)
+    MiniTest.expect.equality(highlights[1]:match("^FixRoute") ~= nil, true)
+    MiniTest.expect.equality(highlights[2]:match("^FixRoute") ~= nil, true)
+    MiniTest.expect.equality(highlights[1] ~= highlights[2], true)
+end
+
+T["route title highlight is stable for repeated routes"] = function()
+    local line = "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|10=198|"
+    set_fix_lines({ line, line })
+
+    local highlights = first_title_highlights()
+    MiniTest.expect.equality(#highlights, 2)
+    MiniTest.expect.equality(highlights[1], highlights[2])
+end
+
+T["route exact override wins over wildcard override"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                message = {
+                    route = {
+                        overrides = {
+                            { sender = "CLIENT1", target = "*", highlight = "FixWildcardRoute" },
+                            { sender = "CLIENT1", target = "BROKER1", highlight = "FixExactRoute" },
+                        },
+                    },
+                },
+            },
+        })
+    ]])
+    set_fix_lines({
+        "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|10=198|",
+    })
+
+    MiniTest.expect.equality(first_title_highlights()[1], "FixExactRoute")
+end
+
+T["route wildcard override matches structured sender and target"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                message = {
+                    route = {
+                        overrides = {
+                            { sender = "CLIENT1", target = "*", highlight = "FixClientSend" },
+                        },
+                    },
+                },
+            },
+        })
+    ]])
+    set_fix_lines({
+        "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER2|52=20251026-09:02:00.000|10=198|",
+    })
+
+    MiniTest.expect.equality(first_title_highlights()[1], "FixClientSend")
+end
+
+T["route resolver can provide highlight when no override matches"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                message = {
+                    route = {
+                        resolver = function(route)
+                            if route.target == "CLIENT1" then
+                                return "FixInboundClient"
+                            end
+                        end,
+                    },
+                },
+            },
+        })
+    ]])
+    set_fix_lines({
+        "8=FIX.4.4|9=70|35=0|34=1|49=BROKER1|56=CLIENT1|52=20251026-09:02:00.000|10=198|",
+    })
+
+    MiniTest.expect.equality(first_title_highlights()[1], "FixInboundClient")
+end
+
+T["route default highlights switch to light background palette"] = function()
+    local got = nvim().lua_get([[
+        (function()
+            require("fix").setup({})
+            local dark = vim.api.nvim_get_hl(0, { name = "FixRoute1", link = false }).fg
+            vim.o.background = "light"
+            local light = vim.api.nvim_get_hl(0, { name = "FixRoute1", link = false })
+            return { dark = dark, light = light.fg, bold = light.bold }
+        end)()
+    ]])
+
+    MiniTest.expect.equality(got.dark ~= got.light, true)
+    MiniTest.expect.equality(got.light, 0x005fcb)
+    MiniTest.expect.equality(got.bold, true)
+end
+
+T["route default highlight registration preserves user groups"] = function()
+    local got = nvim().lua_get([[
+        (function()
+            require("fix").setup({})
+            vim.api.nvim_set_hl(0, "FixRoute1", { fg = "#123456" })
+            vim.o.background = vim.o.background == "dark" and "light" or "dark"
+            return vim.api.nvim_get_hl(0, { name = "FixRoute1", link = false }).fg
+        end)()
+    ]])
+
+    MiniTest.expect.equality(got, 0x123456)
+end
+
+T["custom formatter can reuse route highlight without arrow text"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                message = {
+                    route = {
+                        overrides = {
+                            { sender = "CLIENT1", target = "BROKER1", highlight = "FixClientToBroker" },
+                        },
+                    },
+                    formatter = function(message)
+                        local route = message:route()
+                        return { { { route.sender .. " to " .. route.target, message:route_highlight() } } }
+                    end,
+                },
+            },
+        })
+    ]])
+    set_fix_lines({
+        "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|10=198|",
+    })
+
+    local chunks = first_title_chunks()[1]
+    MiniTest.expect.equality(chunks[1][1], "CLIENT1 to BROKER1")
+    MiniTest.expect.equality(chunks[1][2], "FixClientToBroker")
 end
 
 T["FIXT.1.1 BeginString resolves to FIX.5.0SP2 dictionary"] = function()

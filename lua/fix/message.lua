@@ -1,4 +1,5 @@
 local Field = require("fix.field")
+local Route = require("fix.route")
 
 --- @class Message
 --- @field version string
@@ -30,6 +31,21 @@ end
 --- @return { [number]: Field }
 function M:fields()
     return self._fields
+end
+
+--- @return FixRoute
+function M:route()
+    return Route.get(self)
+end
+
+--- @return string
+function M:route_key()
+    return Route.key(self:route(), "direction")
+end
+
+--- @return string
+function M:route_highlight()
+    return Route.highlight(self)
 end
 
 --- @return Field[]
