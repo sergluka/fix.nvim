@@ -8,7 +8,7 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 
 - Syntax highlighting through [tree-sitter-fix](https://github.com/sergluka/tree-sitter-fix)
 - Inline tag and enum annotations with configurable formatters
-- Message summary titles above, below, or at the front of each FIX message
+- Message summary titles above, below, at the front of, or replacing each FIX message
 - SOH (`\x01`) concealment for readable log files
 - Multiple FIX dictionary versions, including `FIXT.1.1` via `FIX.5.0SP2`
 - Viewport-first rendering with background cache warm-up for large files
@@ -136,7 +136,7 @@ again, or Neovim exits. Examples:
     },
     message = {
       enabled = true,
-      position = "above", -- "above" | "below" | "front"
+      position = "above", -- "above" | "below" | "front" | "replace" | "replace_front"
       route = {
         enabled = true,
         mode = "direction", -- "direction" | "sender" | "pair"
@@ -216,6 +216,12 @@ above and below it, is annotated immediately after the edit debounce. The rest
 of the buffer warms the parse/decode cache in `lines_per_batch` chunks.
 Off-screen extmarks are not kept around; annotations are re-applied as you
 scroll, which keeps large buffers responsive.
+
+Set `annotate.message.position = "replace"` to conceal each FIX message line
+and show the formatted message title in its place. This mode uses Neovim
+conceal, so FIX buffers set `conceallevel=2`. Use `"replace_front"` to keep
+other lines replaced while showing the active line as raw FIX with normal field
+annotations and the title at the front.
 
 ## Keybindings
 
@@ -329,7 +335,7 @@ message title is hidden, use one of these workarounds:
 
 - Add an empty line at the beginning of the file.
 - Press `<C-b>` after opening the file.
-- Set `annotate.message.position = "below"` or `"front"`.
+- Set `annotate.message.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
 
 ## Development
 

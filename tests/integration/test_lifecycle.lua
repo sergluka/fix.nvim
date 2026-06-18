@@ -76,7 +76,7 @@ T["ftplugin/fix.lua applies buffer-local options"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     MiniTest.expect.equality(nvim().lua_get("vim.bo.commentstring"), "# %s")
     MiniTest.expect.equality(nvim().lua_get("vim.bo.iskeyword"), "33-60,62-123,125-255")
-    MiniTest.expect.equality(nvim().lua_get("vim.wo.conceallevel"), 1)
+    MiniTest.expect.equality(nvim().lua_get("vim.wo.conceallevel"), 2)
     MiniTest.expect.equality(nvim().lua_get("vim.wo.concealcursor"), "nc")
     MiniTest.expect.equality(nvim().lua_get("vim.wo.wrap"), true)
 end

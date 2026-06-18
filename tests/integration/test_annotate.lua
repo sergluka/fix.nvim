@@ -36,6 +36,28 @@ local function first_title_highlights()
     return highlights
 end
 
+local function replace_mark_counts()
+    local counts = { conceal = 0, overlay = 0 }
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.details.conceal ~= nil then
+            counts.conceal = counts.conceal + 1
+        end
+        if mark.details.virt_text_pos == "overlay" and mark.details.virt_text then
+            counts.overlay = counts.overlay + 1
+        end
+    end
+    return counts
+end
+
+local function row_has_conceal(row)
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.row == row and mark.details.conceal ~= nil then
+            return true
+        end
+    end
+    return false
+end
+
 T["4.4.fix tag extmarks contain field names"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_inline_label(nvim(), "BeginString")
@@ -95,6 +117,62 @@ T["position=front renders title as inline text at column zero"] = function()
     MiniTest.expect.equality(front_titles, 2)
     H.expect_inline_label(nvim(), "BeginString")
     H.expect_inline_label(nvim(), "MsgType")
+end
+
+T["position=replace conceals message line and overlays title"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "replace" } } })]])
+    H.load_fixture(nvim(), "4.4.fix")
+    H.expect_virt_lines_count(nvim(), 0)
+    H.expect_no_inline_label(nvim(), "BeginString")
+    H.expect_no_inline_label(nvim(), "MsgType")
+
+    local counts = replace_mark_counts()
+    MiniTest.expect.equality(counts.conceal, 2)
+    MiniTest.expect.equality(counts.overlay, 2)
+
+    local first_line_len = nvim().lua_get([=[#vim.api.nvim_buf_get_lines(0, 1, 2, false)[1]]=])
+    local first_line_conceal
+    local first_line_overlay
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.row == 1 and mark.details.conceal ~= nil then
+            first_line_conceal = mark
+        elseif mark.row == 1 and mark.details.virt_text_pos == "overlay" then
+            first_line_overlay = mark
+        end
+    end
+
+    MiniTest.expect.equality(first_line_conceal.details.end_col, first_line_len)
+    MiniTest.expect.equality(first_line_overlay.details.virt_text[1][1]:find("Heartbeat", 1, true) ~= nil, true)
+end
+
+T["position=replace_front draws active line title at front of raw line"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = { message = { position = "replace_front" } },
+        })
+    ]])
+    H.load_fixture(nvim(), "4.4.fix")
+    nvim().cmd("normal! 2G0")
+    nvim().lua([[require("fix.render").refresh_cursor(0)]])
+
+    local active_title
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.row == 1 and mark.col == 0 and mark.details.virt_text_pos == "inline" then
+            active_title = mark
+            break
+        end
+    end
+
+    MiniTest.expect.equality(row_has_conceal(1), false)
+    MiniTest.expect.equality(row_has_conceal(2), true)
+    MiniTest.expect.equality(active_title.details.virt_text[1][1]:find("Heartbeat", 1, true) ~= nil, true)
+    MiniTest.expect.equality(H.inline_label_count(nvim(), "BeginString"), 1)
+
+    nvim().cmd("normal! 3G0")
+    nvim().lua([[require("fix.render").refresh_cursor(0)]])
+    MiniTest.expect.equality(row_has_conceal(1), true)
+    MiniTest.expect.equality(row_has_conceal(2), false)
+    MiniTest.expect.equality(H.inline_label_count(nvim(), "BeginString"), 1)
 end
 
 T["route title highlights distinguish opposite directions"] = function()
@@ -254,9 +332,9 @@ T["multi-version session uses each message's own dictionary"] = function()
     H.expect_inline_label(nvim(), "ApplVerID")
 end
 
-T["SOH-delimited fixture renders with conceallevel=1"] = function()
+T["SOH-delimited fixture renders with conceallevel=2"] = function()
     H.load_fixture(nvim(), "4.2-with_soh.fix")
-    MiniTest.expect.equality(nvim().lua_get("vim.wo.conceallevel"), 1)
+    MiniTest.expect.equality(nvim().lua_get("vim.wo.conceallevel"), 2)
     H.expect_inline_label(nvim(), "BeginString")
 end
 

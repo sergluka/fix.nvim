@@ -1,5 +1,4 @@
 -- TODO: support groups
--- TODO: line-wise conceal (with custom formatting)
 -- TODO: competition?
 -- TODO: validation?
 -- TODO: highlight values based on Type
@@ -17,7 +16,7 @@
 ---@field annotate.value.formatter? fun(field: Field): {text: string, highlight: string}
 ---@field annotate.message? table
 ---@field annotate.message.enabled? boolean
----@field annotate.message.position? string "above" | "below" | "front"
+---@field annotate.message.position? string "above" | "below" | "front" | "replace" | "replace_front"
 ---@field annotate.message.route? table
 ---@field annotate.message.route.enabled? boolean
 ---@field annotate.message.route.mode? string "direction" | "sender" | "pair"
@@ -137,6 +136,16 @@ local function validate_opts(opts, dictionaries)
     end
 
     local route = opts.annotate.message.route
+    local message_position = opts.annotate.message.position
+    if
+        message_position ~= "above"
+        and message_position ~= "below"
+        and message_position ~= "front"
+        and message_position ~= "replace"
+        and message_position ~= "replace_front"
+    then
+        error("fix.nvim: annotate.message.position must be 'above', 'below', 'front', 'replace', or 'replace_front'", 2)
+    end
     if route.mode ~= "direction" and route.mode ~= "sender" and route.mode ~= "pair" then
         error("fix.nvim: annotate.message.route.mode must be 'direction', 'sender', or 'pair'", 2)
     end
@@ -276,6 +285,15 @@ local function register_autocmds()
         callback = function(args)
             if vim.bo[args.buf].filetype == "fix" then
                 Render.refresh_viewport(args.buf)
+            end
+        end,
+    })
+
+    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "WinEnter" }, {
+        group = group,
+        callback = function(args)
+            if vim.bo[args.buf].filetype == "fix" then
+                Render.refresh_cursor(args.buf)
             end
         end,
     })

@@ -54,6 +54,23 @@ function M.payload_for(message, key, opts)
     return payload
 end
 
+local function apply_title(bufnr, ns_id, lnum, title, position)
+    if position == "front" then
+        local virt_text = title[1]
+        if virt_text then
+            vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+                virt_text = virt_text,
+                virt_text_pos = "inline",
+            })
+        end
+    else
+        vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+            virt_lines = title,
+            virt_lines_above = position == "above",
+        })
+    end
+end
+
 --- Apply a payload to one line: point-clear, then set extmarks filtered by
 --- the enabled flags. All marks of a message anchor on the message line
 --- itself, so the point-clear can never orphan anything.
@@ -61,27 +78,34 @@ end
 ---@param bufnr number
 ---@param ns_id number
 ---@param lnum number 0-based
+---@param line_text string
 ---@param payload FixRenderPayload|nil
-function M.apply(opts, bufnr, ns_id, lnum, payload)
+---@param front_line? boolean
+function M.apply(opts, bufnr, ns_id, lnum, line_text, payload, front_line)
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, lnum, lnum + 1)
     if payload == nil then
         return
     end
 
     if opts.annotate.message.enabled and payload.title then
-        if opts.annotate.message.position == "front" then
-            local virt_text = payload.title[1]
-            if virt_text then
-                vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
-                    virt_text = virt_text,
-                    virt_text_pos = "inline",
-                })
+        if opts.annotate.message.position == "replace" or opts.annotate.message.position == "replace_front" then
+            if not front_line then
+                local virt_text = payload.title[1]
+                if virt_text then
+                    vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+                        end_col = #line_text,
+                        conceal = "",
+                    })
+                    vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
+                        virt_text = virt_text,
+                        virt_text_pos = "overlay",
+                    })
+                end
+                return
             end
+            apply_title(bufnr, ns_id, lnum, payload.title, "front")
         else
-            vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
-                virt_lines = payload.title,
-                virt_lines_above = opts.annotate.message.position == "above",
-            })
+            apply_title(bufnr, ns_id, lnum, payload.title, opts.annotate.message.position)
         end
     end
 

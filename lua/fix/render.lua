@@ -8,11 +8,12 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 
 ---@class FixRenderState
----@field rendered { key: string, gen: number }[]  -- index = lnum + 1; sparse
+---@field rendered { key: string, gen: number, front: boolean }[]  -- index = lnum + 1; sparse
 ---@field keys table<string, boolean>              -- every cache key seen in this buffer
 ---@field generation number
 ---@field line_count number                        -- tracked manually: on_lines runs in a fast context
 ---@field warm_next number                         -- next 0-based warm-up line
+---@field revealed table<number, boolean>          -- cursor rows shown raw in replace_front mode
 ---@field warm_timer? uv.uv_timer_t
 ---@field debounce_timer? uv.uv_timer_t
 ---@field dirty? { first: number, last: number }   -- 0-based, last exclusive
@@ -45,17 +46,55 @@ local function render_lines(buf, srow, erow)
         local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
         local key = Cache.key(line)
         local slot = state.rendered[lnum + 1]
-        if not (slot and slot.key == key and slot.gen == state.generation) then
+        local front = state.revealed[lnum] == true
+        if not (slot and slot.key == key and slot.gen == state.generation and slot.front == front) then
             local message, _, authoritative = Document.build_line(buf, lnum, line, key)
             local payload = message and Annotate.payload_for(message, key, o) or nil
-            Annotate.apply(o, buf, ns_id, lnum, payload)
+            Annotate.apply(o, buf, ns_id, lnum, line, payload, front)
             -- A non-authoritative result (tree didn't span the line) must not
             -- mark the slot rendered, or the line would stay bare forever.
             if authoritative then
-                state.rendered[lnum + 1] = { key = key, gen = state.generation }
+                state.rendered[lnum + 1] = { key = key, gen = state.generation, front = front }
                 state.keys[key] = true
             end
         end
+    end
+end
+
+---@param buf number
+local function sync_revealed_lines(buf)
+    local state = states[buf]
+    if not state then
+        return
+    end
+
+    local o = opts()
+    local next_revealed = {}
+    if o.annotate.message.enabled and o.annotate.message.position == "replace_front" then
+        for _, win in ipairs(vim.fn.win_findbuf(buf)) do
+            if vim.api.nvim_win_is_valid(win) then
+                local row = vim.api.nvim_win_get_cursor(win)[1] - 1
+                next_revealed[row] = true
+            end
+        end
+    end
+
+    local changed = {}
+    for lnum in pairs(state.revealed) do
+        if not next_revealed[lnum] then
+            changed[#changed + 1] = lnum
+        end
+    end
+    for lnum in pairs(next_revealed) do
+        if not state.revealed[lnum] then
+            changed[#changed + 1] = lnum
+        end
+    end
+
+    state.revealed = next_revealed
+    for _, lnum in ipairs(changed) do
+        state.rendered[lnum + 1] = nil
+        render_lines(buf, lnum, lnum + 1)
     end
 end
 
@@ -76,9 +115,14 @@ function M.refresh_viewport(buf)
     if not states[buf] then
         return
     end
+    sync_revealed_lines(buf)
     for _, range in ipairs(viewport_ranges(buf)) do
         render_lines(buf, range[1], range[2])
     end
+end
+
+function M.refresh_cursor(buf)
+    sync_revealed_lines(buf)
 end
 
 local function start_warmup(buf)
@@ -217,6 +261,7 @@ function M.attach(buf)
         generation = 0,
         line_count = vim.api.nvim_buf_line_count(buf),
         warm_next = 0,
+        revealed = {},
         idle = false,
     }
     states[buf] = state
@@ -241,6 +286,7 @@ function M.attach(buf)
                 st.keys = {}
                 st.dirty = nil
                 st.warm_next = 0
+                st.revealed = {}
                 st.idle = false
                 vim.schedule(function()
                     if not vim.api.nvim_buf_is_valid(b) or states[b] ~= st then
