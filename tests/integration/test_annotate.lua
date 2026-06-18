@@ -72,14 +72,14 @@ T["4.4.fix value extmarks contain enum names"] = function()
 end
 
 T["position=above renders title as virt_lines above each message"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     -- 4.4.fix has 2 messages → 2 title extmarks.
     H.expect_virt_lines_count(nvim(), 2)
 end
 
 T["position=below anchors title on message line with virt_lines_above=false"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "below" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 2)
     -- With position=below all title marks anchor on the message line itself
@@ -95,7 +95,7 @@ T["position=below anchors title on message line with virt_lines_above=false"] = 
 end
 
 T["position=front renders title as inline text at column zero"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "front" } } })]])
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "front" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 0)
 
@@ -120,7 +120,7 @@ T["position=front renders title as inline text at column zero"] = function()
 end
 
 T["position=replace conceals message line and overlays title"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "replace" } } })]])
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "replace" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 0)
     H.expect_no_inline_label(nvim(), "BeginString")
@@ -148,7 +148,7 @@ end
 T["position=replace_front draws active line title at front of raw line"] = function()
     nvim().lua([[
         require("fix").setup({
-            annotate = { message = { position = "replace_front" } },
+            annotate = { title = { position = "replace_front" } },
         })
     ]])
     H.load_fixture(nvim(), "4.4.fix")
@@ -173,6 +173,45 @@ T["position=replace_front draws active line title at front of raw line"] = funct
     MiniTest.expect.equality(row_has_conceal(1), true)
     MiniTest.expect.equality(row_has_conceal(2), false)
     MiniTest.expect.equality(H.inline_label_count(nvim(), "BeginString"), 1)
+end
+
+T["legacy annotate.message config warns and maps to title"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
+    H.load_fixture(nvim(), "4.4.fix")
+    H.expect_notified(nvim(), "annotate%.message is deprecated")
+
+    local has_below_anchor = false
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.details.virt_lines and mark.details.virt_lines_above == false then
+            has_below_anchor = true
+        end
+    end
+    MiniTest.expect.equality(has_below_anchor, true)
+end
+
+T["annotate.title wins over legacy annotate.message"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                message = { position = "below" },
+                title = { position = "front" },
+            },
+        })
+    ]])
+    H.load_fixture(nvim(), "4.4.fix")
+    H.expect_notified(nvim(), "annotate%.message is deprecated")
+    H.expect_virt_lines_count(nvim(), 0)
+
+    local front_titles = 0
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if mark.row >= 1 and mark.col == 0 and mark.details.virt_text_pos == "inline" then
+            local vt = mark.details.virt_text
+            if vt and vt[1] and type(vt[1][2]) == "string" and vt[1][2]:match("^FixRoute") then
+                front_titles = front_titles + 1
+            end
+        end
+    end
+    MiniTest.expect.equality(front_titles, 2)
 end
 
 T["route title highlights distinguish opposite directions"] = function()
@@ -201,7 +240,7 @@ T["route exact override wins over wildcard override"] = function()
     nvim().lua([[
         require("fix").setup({
             annotate = {
-                message = {
+                title = {
                     route = {
                         overrides = {
                             { sender = "CLIENT1", target = "*", highlight = "FixWildcardRoute" },
@@ -223,7 +262,7 @@ T["route wildcard override matches structured sender and target"] = function()
     nvim().lua([[
         require("fix").setup({
             annotate = {
-                message = {
+                title = {
                     route = {
                         overrides = {
                             { sender = "CLIENT1", target = "*", highlight = "FixClientSend" },
@@ -244,7 +283,7 @@ T["route resolver can provide highlight when no override matches"] = function()
     nvim().lua([[
         require("fix").setup({
             annotate = {
-                message = {
+                title = {
                     route = {
                         resolver = function(route)
                             if route.target == "CLIENT1" then
@@ -296,7 +335,7 @@ T["custom formatter can reuse route highlight without arrow text"] = function()
     nvim().lua([[
         require("fix").setup({
             annotate = {
-                message = {
+                title = {
                     route = {
                         overrides = {
                             { sender = "CLIENT1", target = "BROKER1", highlight = "FixClientToBroker" },

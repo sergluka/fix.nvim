@@ -14,16 +14,17 @@
 ---@field annotate.value? table
 ---@field annotate.value.enabled? boolean
 ---@field annotate.value.formatter? fun(field: Field): {text: string, highlight: string}
----@field annotate.message? table
----@field annotate.message.enabled? boolean
----@field annotate.message.position? string "above" | "below" | "front" | "replace" | "replace_front"
----@field annotate.message.route? table
----@field annotate.message.route.enabled? boolean
----@field annotate.message.route.mode? string "direction" | "sender" | "pair"
----@field annotate.message.route.palette? string[]
----@field annotate.message.route.overrides? FixRouteRule[]
----@field annotate.message.route.resolver? fun(route: FixRoute, message: Message): string|nil
----@field annotate.message.formatter? fun(message: Message): table
+---@field annotate.title? table
+---@field annotate.title.enabled? boolean
+---@field annotate.title.position? string "above" | "below" | "front" | "replace" | "replace_front"
+---@field annotate.title.route? table
+---@field annotate.title.route.enabled? boolean
+---@field annotate.title.route.mode? string "direction" | "sender" | "pair"
+---@field annotate.title.route.palette? string[]
+---@field annotate.title.route.overrides? FixRouteRule[]
+---@field annotate.title.route.resolver? fun(route: FixRoute, message: Message): string|nil
+---@field annotate.title.formatter? fun(message: Message): table
+---@field annotate.message? table Deprecated alias for annotate.title.
 ---@field cache? table
 ---@field cache.persist? table
 ---@field cache.persist.enabled? boolean
@@ -72,7 +73,7 @@ local default_settings = {
             enabled = true,
             formatter = ValueFormatter.default,
         },
-        message = {
+        title = {
             enabled = true,
             position = "above",
             route = {
@@ -109,6 +110,22 @@ local default_settings = {
     },
 }
 
+---@param opts FixOpts|nil
+---@return FixOpts
+local function normalize_opts(opts)
+    local normalized = vim.deepcopy(opts or {})
+    local annotate = normalized.annotate
+    -- TODO: remove this later
+    if type(annotate) == "table" and annotate.message ~= nil then
+        vim.notify_once("fix.nvim: annotate.message is deprecated; use annotate.title", vim.log.levels.WARN)
+        if annotate.title == nil then
+            annotate.title = annotate.message
+        end
+        annotate.message = nil
+    end
+    return normalized
+end
+
 ---@param opts FixOpts
 ---@param dictionaries? DictionaryRegistry
 local function validate_opts(opts, dictionaries)
@@ -135,47 +152,47 @@ local function validate_opts(opts, dictionaries)
         error("fix.nvim: cache.persist.max_files and max_bytes cannot both be false when persistence is enabled", 2)
     end
 
-    local route = opts.annotate.message.route
-    local message_position = opts.annotate.message.position
+    local route = opts.annotate.title.route
+    local title_position = opts.annotate.title.position
     if
-        message_position ~= "above"
-        and message_position ~= "below"
-        and message_position ~= "front"
-        and message_position ~= "replace"
-        and message_position ~= "replace_front"
+        title_position ~= "above"
+        and title_position ~= "below"
+        and title_position ~= "front"
+        and title_position ~= "replace"
+        and title_position ~= "replace_front"
     then
-        error("fix.nvim: annotate.message.position must be 'above', 'below', 'front', 'replace', or 'replace_front'", 2)
+        error("fix.nvim: annotate.title.position must be 'above', 'below', 'front', 'replace', or 'replace_front'", 2)
     end
     if route.mode ~= "direction" and route.mode ~= "sender" and route.mode ~= "pair" then
-        error("fix.nvim: annotate.message.route.mode must be 'direction', 'sender', or 'pair'", 2)
+        error("fix.nvim: annotate.title.route.mode must be 'direction', 'sender', or 'pair'", 2)
     end
     if type(route.palette) ~= "table" or #route.palette == 0 then
-        error("fix.nvim: annotate.message.route.palette must contain at least one highlight group", 2)
+        error("fix.nvim: annotate.title.route.palette must contain at least one highlight group", 2)
     end
     for _, group in ipairs(route.palette) do
         if type(group) ~= "string" or group == "" then
-            error("fix.nvim: annotate.message.route.palette must contain highlight group names", 2)
+            error("fix.nvim: annotate.title.route.palette must contain highlight group names", 2)
         end
     end
     if type(route.overrides) ~= "table" then
-        error("fix.nvim: annotate.message.route.overrides must be a list", 2)
+        error("fix.nvim: annotate.title.route.overrides must be a list", 2)
     end
     for _, rule in ipairs(route.overrides) do
         if type(rule) ~= "table" then
-            error("fix.nvim: annotate.message.route.overrides entries must be tables", 2)
+            error("fix.nvim: annotate.title.route.overrides entries must be tables", 2)
         end
         if rule.sender ~= nil and type(rule.sender) ~= "string" then
-            error("fix.nvim: annotate.message.route.overrides sender must be a string", 2)
+            error("fix.nvim: annotate.title.route.overrides sender must be a string", 2)
         end
         if rule.target ~= nil and type(rule.target) ~= "string" then
-            error("fix.nvim: annotate.message.route.overrides target must be a string", 2)
+            error("fix.nvim: annotate.title.route.overrides target must be a string", 2)
         end
         if type(rule.highlight) ~= "string" or rule.highlight == "" then
-            error("fix.nvim: annotate.message.route.overrides highlight must be a highlight group", 2)
+            error("fix.nvim: annotate.title.route.overrides highlight must be a highlight group", 2)
         end
     end
     if route.resolver ~= nil and type(route.resolver) ~= "function" then
-        error("fix.nvim: annotate.message.route.resolver must be a function", 2)
+        error("fix.nvim: annotate.title.route.resolver must be a function", 2)
     end
 end
 
@@ -329,7 +346,7 @@ end
 ---@param opts FixOpts
 function M.setup(opts)
     local prev_opts = M.opts
-    local next_opts = vim.tbl_deep_extend("force", default_settings, opts or {})
+    local next_opts = vim.tbl_deep_extend("force", default_settings, normalize_opts(opts))
     local dictionaries = Dictionary.prepare(next_opts.dictionaries)
     validate_opts(next_opts, dictionaries)
 
@@ -356,7 +373,7 @@ function M.setup(opts)
     end
 end
 
----@param scope? "all" | "tag" | "value" | "message"
+---@param scope? "all" | "tag" | "value" | "title" | "message"
 function M.annotate_toggle(scope)
     local buf = vim.api.nvim_get_current_buf()
     if vim.bo[buf].filetype ~= "fix" then
@@ -366,24 +383,24 @@ function M.annotate_toggle(scope)
     if scope == "all" or scope == nil then
         local someone_is_enabled = M.opts.annotate.tag.enabled
             or M.opts.annotate.value.enabled
-            or M.opts.annotate.message.enabled
+            or M.opts.annotate.title.enabled
 
         if someone_is_enabled then
             M.opts_initial = vim.deepcopy(M.opts)
             M.opts.annotate.tag.enabled = false
             M.opts.annotate.value.enabled = false
-            M.opts.annotate.message.enabled = false
+            M.opts.annotate.title.enabled = false
         else
             M.opts.annotate.tag.enabled = M.opts_initial.annotate.tag.enabled
             M.opts.annotate.value.enabled = M.opts_initial.annotate.value.enabled
-            M.opts.annotate.message.enabled = M.opts_initial.annotate.message.enabled
+            M.opts.annotate.title.enabled = M.opts_initial.annotate.title.enabled
         end
     elseif scope == "tag" then
         M.opts.annotate.tag.enabled = not M.opts.annotate.tag.enabled
     elseif scope == "value" then
         M.opts.annotate.value.enabled = not M.opts.annotate.value.enabled
-    elseif scope == "message" then
-        M.opts.annotate.message.enabled = not M.opts.annotate.message.enabled
+    elseif scope == "title" or scope == "message" then
+        M.opts.annotate.title.enabled = not M.opts.annotate.title.enabled
     end
 
     Render.rerender(buf)

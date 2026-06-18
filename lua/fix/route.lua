@@ -100,7 +100,7 @@ end
 ---@return string
 function M.highlight(message, opts)
     opts = opts or require("fix").opts
-    local route_opts = opts and opts.annotate and opts.annotate.message and opts.annotate.message.route or nil
+    local route_opts = opts and opts.annotate and opts.annotate.title and opts.annotate.title.route or nil
 
     if not route_opts or route_opts.enabled == false then
         return "Title"

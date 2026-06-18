@@ -65,7 +65,7 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 | Command | Lua API | Description |
 | --- | --- | --- |
 | `:FIX --help` | | Show command help |
-| `:FIX annotations [all|tag|value|message]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope |
+| `:FIX annotations [all|tag|value|title|message]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
 | `:FIX dictionary <PATH>` | `require("fix").use_dictionary(path)` | Use a custom FIX dictionary XML file or repository directory |
@@ -134,7 +134,7 @@ again, or Neovim exits. Examples:
       enabled = true,
       formatter = require("fix.formatters.value").default,
     },
-    message = {
+    title = {
       enabled = true,
       position = "above", -- "above" | "below" | "front" | "replace" | "replace_front"
       route = {
@@ -192,8 +192,8 @@ Formatter output is cached by line hash and reused across identical lines and
 buffers, so formatters that read `message.lineno`, buffer state, or other
 external state can produce stale annotations.
 
-Message formatters can reuse route styling without depending on the default
-`sender=>target` title text:
+Title formatters receive the parsed message and can reuse route styling without
+depending on the default `sender=>target` title text:
 
 ```lua
 formatter = function(message)
@@ -217,11 +217,14 @@ of the buffer warms the parse/decode cache in `lines_per_batch` chunks.
 Off-screen extmarks are not kept around; annotations are re-applied as you
 scroll, which keeps large buffers responsive.
 
-Set `annotate.message.position = "replace"` to conceal each FIX message line
+Set `annotate.title.position = "replace"` to conceal each FIX message line
 and show the formatted message title in its place. This mode uses Neovim
 conceal, so FIX buffers set `conceallevel=2`. Use `"replace_front"` to keep
 other lines replaced while showing the active line as raw FIX with normal field
 annotations and the title at the front.
+
+`annotate.message` is kept as a deprecated alias for `annotate.title`. Using it
+emits a warning; if both are set, `annotate.title` wins.
 
 ## Keybindings
 
@@ -240,8 +243,8 @@ local function smart_yank()
 end
 
 map("<localleader>t", function()
-  fix.annotate_toggle("message")
-end, "toggle message annotation")
+  fix.annotate_toggle("title")
+end, "toggle title annotation")
 
 map("<localleader>T", function()
   fix.annotate_toggle("all")
@@ -335,7 +338,7 @@ message title is hidden, use one of these workarounds:
 
 - Add an empty line at the beginning of the file.
 - Press `<C-b>` after opening the file.
-- Set `annotate.message.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
+- Set `annotate.title.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
 
 ## Development
 

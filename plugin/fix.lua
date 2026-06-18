@@ -74,7 +74,7 @@ local function register_commands()
     toggle:add_parameter({
         name = "scope",
         required = false,
-        choices = { "all", "tag", "value", "message" },
+        choices = { "all", "tag", "value", "title", "message" },
         help = "Type of annotation",
     })
     toggle:set_execute(function(data)

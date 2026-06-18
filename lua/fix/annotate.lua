@@ -11,7 +11,7 @@ local M = {}
 function M.build_payload(message, opts)
     local payload = { marks = {} }
 
-    local ok, title = pcall(opts.annotate.message.formatter, message)
+    local ok, title = pcall(opts.annotate.title.formatter, message)
     if ok then
         payload.title = title
     else
@@ -87,8 +87,8 @@ function M.apply(opts, bufnr, ns_id, lnum, line_text, payload, front_line)
         return
     end
 
-    if opts.annotate.message.enabled and payload.title then
-        if opts.annotate.message.position == "replace" or opts.annotate.message.position == "replace_front" then
+    if opts.annotate.title.enabled and payload.title then
+        if opts.annotate.title.position == "replace" or opts.annotate.title.position == "replace_front" then
             if not front_line then
                 local virt_text = payload.title[1]
                 if virt_text then
@@ -105,7 +105,7 @@ function M.apply(opts, bufnr, ns_id, lnum, line_text, payload, front_line)
             end
             apply_title(bufnr, ns_id, lnum, payload.title, "front")
         else
-            apply_title(bufnr, ns_id, lnum, payload.title, opts.annotate.message.position)
+            apply_title(bufnr, ns_id, lnum, payload.title, opts.annotate.title.position)
         end
     end
 

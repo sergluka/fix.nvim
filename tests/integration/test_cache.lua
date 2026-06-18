@@ -168,7 +168,7 @@ end
 
 T["behavior"]["position=below leaves no stale title after edit"] = function()
     local nvim = Helpers.nvim()
-    nvim.lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
+    nvim.lua([[require("fix").setup({ annotate = { title = { position = "below" } } })]])
     Helpers.load_fixture(nvim, "4.4.fix")
 
     local titles_before = Helpers.virt_lines_count(nvim)
@@ -182,7 +182,7 @@ end
 
 T["behavior"]["position=below renders title for a message on the last line"] = function()
     local nvim = Helpers.nvim()
-    nvim.lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
+    nvim.lua([[require("fix").setup({ annotate = { title = { position = "below" } } })]])
 
     -- Build a buffer whose sole message line is the LAST buffer line.
     local first_line = nvim.lua_get([=[vim.fn.readfile("tests/integration/fixtures/4.4.fix")[2]]=])
@@ -198,7 +198,7 @@ end
 
 T["behavior"]["deleting the last line removes its annotations"] = function()
     local nvim = Helpers.nvim()
-    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+    nvim.lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
     Helpers.load_fixture(nvim, "duplicated-lines.fix")
     Helpers.expect_virt_lines_count(nvim, 3)
 
@@ -212,7 +212,7 @@ end
 
 T["behavior"]["shrinking reload leaves no stale titles"] = function()
     local nvim = Helpers.nvim()
-    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+    nvim.lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
 
     -- Simulate `git revert` of a big file: open it, then replace it on disk
     -- with shorter content and reload.
@@ -245,7 +245,7 @@ end
 
 T["behavior"]["growing reload does not poison the cache"] = function()
     local nvim = Helpers.nvim()
-    nvim.lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+    nvim.lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
     local message_line = nvim.lua_get([=[vim.fn.readfile("tests/integration/fixtures/4.4.fix")[2]]=])
 
     -- Small warmed file...

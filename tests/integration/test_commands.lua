@@ -22,26 +22,34 @@ T["FIX annotations value toggle"] = function()
     MiniTest.expect.equality(#H.get_extmarks(nvim()), before)
 end
 
-T["FIX annotations message toggle"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+T["FIX annotations title toggle"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
+    H.load_fixture(nvim(), "4.4.fix")
+    H.expect_virt_lines_count(nvim(), 2)
+    nvim().cmd("FIX annotations title")
+    H.expect_virt_lines_count(nvim(), 0)
+    nvim().cmd("FIX annotations title")
+    H.expect_virt_lines_count(nvim(), 2)
+end
+
+T["FIX annotations message toggle remains a legacy alias"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_virt_lines_count(nvim(), 2)
     nvim().cmd("FIX annotations message")
     H.expect_virt_lines_count(nvim(), 0)
-    nvim().cmd("FIX annotations message")
-    H.expect_virt_lines_count(nvim(), 2)
 end
 
 T["FIX annotations all off then on restores per-scope flags"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "above" } } })]])
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
     H.load_fixture(nvim(), "4.4.fix")
-    nvim().cmd("FIX annotations message")
+    nvim().cmd("FIX annotations title")
     local pre_off_count = #H.get_extmarks(nvim())
     nvim().cmd("FIX annotations all")
     MiniTest.expect.equality(#H.get_extmarks(nvim()), 0)
     nvim().cmd("FIX annotations all")
     MiniTest.expect.equality(#H.get_extmarks(nvim()), pre_off_count)
-    -- Message scope must remain off after restore.
+    -- Title scope must remain off after restore.
     H.expect_virt_lines_count(nvim(), 0)
 end
 

@@ -70,7 +70,7 @@ local function sync_revealed_lines(buf)
 
     local o = opts()
     local next_revealed = {}
-    if o.annotate.message.enabled and o.annotate.message.position == "replace_front" then
+    if o.annotate.title.enabled and o.annotate.title.position == "replace_front" then
         for _, win in ipairs(vim.fn.win_findbuf(buf)) do
             if vim.api.nvim_win_is_valid(win) then
                 local row = vim.api.nvim_win_get_cursor(win)[1] - 1
