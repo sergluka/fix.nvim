@@ -43,5 +43,6 @@ The plugin decorates FIX-message buffers with extmark-based virtual text; it doe
 
 - Lua 5.1, 4-space indentation (configured in `stylua.toml`). Keep `---@class` / `---@field` annotations in sync with `FixOpts` in `init.lua` when adding options.
 - New options must be added to `default_settings` in `init.lua` AND to the `FixOpts` annotation; downstream code reads them through the merged `M.opts`.
+- User-facing configuration samples are duplicated in `README.md`, `doc/fix.nvim.txt`, and `lua/fix/init.lua`; when changing defaults or option shape, update or verify all three.
 - When adding a FIX version: drop `Fields.xml`/`Enums.xml` under `xml/FIX.<ver>/Base/`, add it to `Consts.FixVersion` and to the `versions` maps in both `document.lua` and `init.lua`'s `browse_tag_online`, and extend the version list in `tests/integration/test_dictionary.lua`.
 - Tests should load dictionaries via `Subject.load(...)` rather than stubbing XML.

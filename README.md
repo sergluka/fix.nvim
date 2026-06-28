@@ -128,11 +128,15 @@ again, or Neovim exits. Examples:
   annotate = {
     tag = {
       enabled = true,
-      formatter = require("fix.formatters.tag").default,
+      formatter = function(field)
+        return require("fix.formatters.tag").default(field)
+      end,
     },
     value = {
       enabled = true,
-      formatter = require("fix.formatters.value").default,
+      formatter = function(field)
+        return require("fix.formatters.value").default(field)
+      end,
     },
     title = {
       enabled = true,
@@ -155,7 +159,9 @@ again, or Neovim exits. Examples:
         },
         resolver = nil, -- function(route, message) return "HighlightGroup" end
       },
-      formatter = require("fix.formatters.message").default,
+      formatter = function(message)
+        return require("fix.formatters.message").default(message)
+      end,
     },
   },
 
@@ -175,6 +181,10 @@ again, or Neovim exits. Examples:
   },
 }
 ```
+
+Omit a `formatter` field to use the built-in formatter. The wrapped
+`require(...)` form above is safe for plugin-manager `opts` tables because the
+module is loaded only when the formatter runs.
 
 `dictionaries` may also be a list of paths or `{ path, mode }` entries when
 each entry infers a different FIX version. If two entries infer the same

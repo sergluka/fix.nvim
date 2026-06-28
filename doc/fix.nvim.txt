@@ -149,11 +149,15 @@ These are the defaults:
       annotate = {
         tag = {
           enabled = true,
-          formatter = require("fix.formatters.tag").default,
+          formatter = function(field)
+            return require("fix.formatters.tag").default(field)
+          end,
         },
         value = {
           enabled = true,
-          formatter = require("fix.formatters.value").default,
+          formatter = function(field)
+            return require("fix.formatters.value").default(field)
+          end,
         },
         title = {
           enabled = true,
@@ -176,7 +180,9 @@ These are the defaults:
             },
             resolver = nil, -- function(route, message) return "HighlightGroup" end
           },
-          formatter = require("fix.formatters.message").default,
+          formatter = function(message)
+            return require("fix.formatters.message").default(message)
+          end,
         },
       },
 
@@ -196,6 +202,10 @@ These are the defaults:
       },
     })
 <
+Omit a `formatter` field to use the built-in formatter. The wrapped
+`require(...)` form above is safe for plugin-manager `opts` tables because the
+module is loaded only when the formatter runs.
+
 `fallback_version` must refer to a bundled or configured dictionary.
 `FIXT.1.1` resolves through `FIX.5.0SP2` unless explicitly registered.
 
