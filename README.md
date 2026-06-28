@@ -160,7 +160,7 @@ again, or Neovim exits. Examples:
         resolver = nil, -- function(route, message) return "HighlightGroup" end
       },
       formatter = function(message)
-        return require("fix.formatters.message").default(message)
+        return require("fix.formatters.title").default(message)
       end,
     },
   },

@@ -48,7 +48,7 @@ local Cache = require("fix.cache")
 local Consts = require("fix.consts")
 local Dictionary = require("fix.dictionary")
 local Document = require("fix.document")
-local MessageFormatter = require("fix.formatters.message")
+local TitleFormatter = require("fix.formatters.title")
 local Persist = require("fix.persist")
 local Render = require("fix.render")
 local TagFormatter = require("fix.formatters.tag")
@@ -92,7 +92,7 @@ local default_settings = {
                 overrides = {},
                 resolver = nil,
             },
-            formatter = MessageFormatter.default,
+            formatter = TitleFormatter.default,
         },
     },
     cache = {
