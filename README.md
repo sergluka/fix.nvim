@@ -350,6 +350,14 @@ message title is hidden, use one of these workarounds:
 - Press `<C-b>` after opening the file.
 - Set `annotate.title.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
 
+Field annotations are inline virtual text placed after each tag and value. With
+`wrap` enabled, Neovim folds inline virtual text into the line's display flow and
+breaks it at the wrap boundary rather than keeping each label whole — so on long
+FIX lines an annotation can be split mid-word across two screen rows, and cursor
+motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim
+bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341).
+To keep labels intact, use `:setlocal nowrap` in FIX buffers and scroll horizontally.
+
 ## Development
 
 Integration tests run inside a Podman container. The image includes Neovim, the
