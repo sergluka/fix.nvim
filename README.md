@@ -1,8 +1,8 @@
-# fix.nvim
+# fix.nvim: FIX Protocol viewer for Neovim
 
-fix.nvim is a Neovim plugin for reading [FIX protocol](https://www.fixtrading.org/standards/) logs.
-It parses FIX messages with tree-sitter, resolves tags and enum values from
-vendored FIX dictionaries, and decorates buffers with virtual text.
+fix.nvim is a Neovim plugin for viewing, highlighting, annotating, navigating,
+and exploring [Financial Information eXchange (FIX)](https://www.fixtrading.org/standards/)
+protocol messages.
 
 ## Features
 
