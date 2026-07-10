@@ -16,6 +16,14 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 - Commands for yanking fields/messages, opening online tag docs, and browsing
   fields with [snacks.nvim](https://github.com/folke/snacks.nvim)
 
+## Limitations
+
+Before using this plugin, consider the following known Neovim limitations:
+
+- On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`).
+- Virtual lines above the first buffer line are not displayed ([neovim/neovim#16166](https://github.com/neovim/neovim/issues/16166)). Workaround: avoid `annotate.title.position = "above"`.
+- On very large files, Neovim's tree-sitter highlighting can freeze the UI when jumping into unparsed regions. Disable highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your distribution's big-file protection handle it.
+
 ## Screenshots
 
 ![FIX tag and value annotations](./media/annotate-wo-title.png)
@@ -33,13 +41,6 @@ vendored FIX dictionaries, and decorates buffers with virtual text.
 - `mega.logging`
 - Optional: `snacks.nvim` for `:FIX picker`
 - Development only: Podman >= 5.x for integration tests
-
-> [!TIP]
-> On very large files, Neovim's tree-sitter highlighting can freeze the UI when
-> jumping into unparsed regions. That is independent of fix.nvim. Disable
-> highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your
-> distribution's big-file protection handle it. fix.nvim annotations continue to
-> work because the plugin parses asynchronously and renders the viewport first.
 
 ## Installation
 
@@ -339,24 +340,6 @@ v...<localleader>y
 
 Operator targets such as `]]` must be available in operator-pending mode (`"o"`).
 The `ts_map()` helper above uses `{ "n", "x", "o" }` for that reason.
-
-## Limitations
-
-Due to a [Neovim limitation](https://github.com/neovim/neovim/issues/16166),
-virtual lines above the first buffer line are not displayed. If the first
-message title is hidden, use one of these workarounds:
-
-- Add an empty line at the beginning of the file.
-- Press `<C-b>` after opening the file.
-- Set `annotate.title.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
-
-Field annotations are inline virtual text placed after each tag and value. With
-`wrap` enabled, Neovim folds inline virtual text into the line's display flow and
-breaks it at the wrap boundary rather than keeping each label whole — so on long
-FIX lines an annotation can be split mid-word across two screen rows, and cursor
-motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim
-bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341).
-To keep labels intact, use `:setlocal nowrap` in FIX buffers and scroll horizontally.
 
 ## Development
 
