@@ -93,6 +93,10 @@ again, or Neovim exits. Examples:
 
 ## Configuration
 
+Pass this table as `opts` for your plugin manager, or pass the same fields to
+`require("fix").setup({ ... })`. You only need to set the parts you want to
+change; omitted fields fall back to the defaults below.
+
 ```lua
 {
   -- Bundled dictionary version used when BeginString (tag 8) is missing or unknown.
@@ -183,23 +187,51 @@ again, or Neovim exits. Examples:
 }
 ```
 
+### Dictionaries
+
+`fallback_version` is the bundled dictionary used when a message has no tag `8`
+(`BeginString`) or when its version is unknown. It must point to either a
+bundled dictionary or a version configured in `dictionaries`. `FIXT.1.1`
+resolves through `FIX.5.0SP2` unless you register a custom `FIXT.1.1`
+dictionary.
+
+`dictionaries` lets you replace or extend dictionaries per FIX version. Use an
+explicit version key when you know the `BeginString` value, especially when two
+custom files would otherwise infer the same version. Entries may also be a list
+of paths or `{ path, mode }` tables when each file infers a different version.
+
+`mode = "auto"` detects the dictionary layout from the path. Use `"quickfix"`
+for one QuickFIX-style XML file, or `"repository"` for a FIX Repository
+directory containing `Fields.xml` and `Enums.xml`.
+
+Custom tag decoders run after XML dictionary lookup. They receive the parsed
+`field` and `ctx = { version, fields, dictionary }`. Return `tag_text` and/or
+`value_text` to replace the XML-derived annotation text; return `nil` for either
+key to keep the existing value. A pathless entry such as
+`dictionaries["FIX.4.4"] = { tags = ... }` overlays the bundled dictionary for
+that version. The `FixTagDecoder` alias is available for LuaLS annotations.
+
+### Filetype Detection
+
+`ft.extensions` and `ft.pattern` are passed to `vim.filetype.add()`. Add entries
+here when your FIX logs use project-specific extensions or names. Buffers with
+`filetype=fix` are attached automatically.
+
+### Annotations
+
+`annotate.tag`, `annotate.value`, and `annotate.title` can each be enabled or
+disabled independently. `:FIX annotations all` toggles all three scopes, and
+`:FIX annotations tag|value|title` toggles one scope.
+
 Omit a `formatter` field to use the built-in formatter. The wrapped
 `require(...)` form above is safe for plugin-manager `opts` tables because the
 module is loaded only when the formatter runs.
 
-`dictionaries` may also be a list of paths or `{ path, mode }` entries when
-each entry infers a different FIX version. If two entries infer the same
-version, use explicit version keys as shown above.
-
-Custom tag decoders receive the parsed `field` after XML dictionary lookup and
-`ctx = { version, fields, dictionary }`. Return `tag_text` and/or `value_text`
-to replace the XML-derived annotation text; return `nil` for either key to keep
-the existing value. A pathless entry such as `dictionaries["FIX.4.4"] =
-{ tags = ... }` overlays the bundled dictionary for that version. The
-`FixTagDecoder` alias is available for LuaLS annotations.
-
-Custom formatters should be pure functions of the provided message or field.
-Formatter output is cached by line hash and reused across identical lines and
+Tag and value formatters receive a parsed field and return one virtual-text
+chunk, such as `{ "(Symbol)", "Comment" }`. Title formatters receive a parsed
+message and return virtual lines, such as `{ { { "title", "Highlight" } } }`.
+Custom formatters should be pure functions of the provided message or field:
+formatter output is cached by line hash and reused across identical lines and
 buffers, so formatters that read `message.lineno`, buffer state, or other
 external state can produce stale annotations.
 
@@ -214,13 +246,36 @@ end
 ```
 
 Route override rules match structured FIX tag values from `49` and `56`, not
-the rendered title string. Use `*` as a wildcard for either side.
+the rendered title string. Use `*` as a wildcard for either side. The route
+`mode` controls how automatic colors are shared: `"direction"` groups messages
+by direction, `"sender"` groups by sender, and `"pair"` groups each
+sender/target pair separately.
 
-The persistent cache lives at `stdpath("cache")/fix.nvim` unless
-`cache.persist.dir` is set. Set `cache.persist.enabled = false` to keep all
-cache data in memory only. Cache rotation deletes the oldest `.mpack` files
-until both enabled limits, `max_files` and `max_bytes`, are satisfied. When
+`annotate.title.position` controls where the message title is shown:
+
+- `"above"` and `"below"` render a virtual line around the FIX message.
+- `"front"` inserts the title before the raw FIX text.
+- `"replace"` conceals each FIX message line and overlays the title.
+- `"replace_front"` keeps inactive lines replaced, but shows the active line as
+  raw FIX with the title in front.
+
+`"replace"` and `"replace_front"` use Neovim conceal, so FIX buffers set
+`conceallevel=2`. `annotate.message` is kept as a deprecated alias for
+`annotate.title`; using it emits a warning, and `annotate.title` wins if both
+are set.
+
+### Cache
+
+The persistent cache stores parsed and decoded messages so repeated sessions can
+open large logs faster. It lives at `stdpath("cache")/fix.nvim` unless
+`cache.persist.dir` is set.
+
+Set `cache.persist.enabled = false` to keep all cache data in memory only.
+`max_files` limits the number of cache files, and `max_bytes` limits their total
+size. Set either limit to `false` to disable that specific limit. When
 persistence is enabled, at least one rotation limit must remain enabled.
+
+### Rendering
 
 Rendering is viewport-first. The visible region, plus `viewport_margin` lines
 above and below it, is annotated immediately after the edit debounce. The rest
@@ -228,14 +283,10 @@ of the buffer warms the parse/decode cache in `lines_per_batch` chunks.
 Off-screen extmarks are not kept around; annotations are re-applied as you
 scroll, which keeps large buffers responsive.
 
-Set `annotate.title.position = "replace"` to conceal each FIX message line
-and show the formatted message title in its place. This mode uses Neovim
-conceal, so FIX buffers set `conceallevel=2`. Use `"replace_front"` to keep
-other lines replaced while showing the active line as raw FIX with normal field
-annotations and the title at the front.
-
-`annotate.message` is kept as a deprecated alias for `annotate.title`. Using it
-emits a warning; if both are set, `annotate.title` wins.
+`render.debounce_ms` waits briefly after edits before rendering, which avoids
+doing repeated work while a file is still changing. `render.lines_per_batch`
+controls the background cache warm-up chunk size. Higher values can warm the
+cache faster but may make very large files feel less responsive.
 
 ## Keybindings
 
