@@ -66,7 +66,7 @@ Before using this plugin, consider the following known Neovim limitations:
 | Command | Lua API | Description |
 | --- | --- | --- |
 | `:FIX --help` | | Show command help |
-| `:FIX annotations [all|tag|value|title|message]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
+| `:FIX annotations [all|tag|value|title|message|group]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
 | `:FIX dictionary <PATH>` | `require("fix").use_dictionary(path)` | Use a custom FIX dictionary XML file or repository directory |
@@ -81,10 +81,12 @@ with `FIX dictionary`. Selection is based on tag `8` (`BeginString`): a custom
 dictionary keyed by that version wins, otherwise the bundled dictionary is used.
 
 `FIX dictionary` accepts a QuickFIX-style XML file or a FIX Repository
-directory containing `Fields.xml` and `Enums.xml`. The dictionary version is
-detected from the XML and replaces the active dictionary for that version until
-another custom dictionary is registered for the same version, `setup()` is run
-again, or Neovim exits. Examples:
+directory containing `Fields.xml` and `Enums.xml`. Repository dictionaries can
+also include `Messages.xml`, `MsgContents.xml`, and `Components.xml` to enable
+repeating group paths. The dictionary version is detected from the XML and
+replaces the active dictionary for that version until another custom dictionary
+is registered for the same version, `setup()` is run again, or Neovim exits.
+Examples:
 
 ```vim
 :FIX dictionary xml/custom/binance/spot-fix-oe.xml
@@ -168,6 +170,24 @@ change; omitted fields fall back to the defaults below.
         return require("fix.formatters.title").default(message)
       end,
     },
+    group = {
+      path = {
+        enabled = true, -- Show group paths in field labels.
+      },
+      highlight = {
+        enabled = true, -- Highlight grouped fields.
+        target = "both", -- "raw", "annotation", or "both"
+        -- Alternate colors by depth and entry.
+        palette = {
+          "FixGroupDepth1A",
+          "FixGroupDepth1B",
+          "FixGroupDepth2A",
+          "FixGroupDepth2B",
+          "FixGroupDepth3A",
+          "FixGroupDepth3B",
+        },
+      },
+    },
   },
 
   cache = {
@@ -219,9 +239,9 @@ here when your FIX logs use project-specific extensions or names. Buffers with
 
 ### Annotations
 
-`annotate.tag`, `annotate.value`, and `annotate.title` can each be enabled or
-disabled independently. `:FIX annotations all` toggles all three scopes, and
-`:FIX annotations tag|value|title` toggles one scope.
+Group paths, group highlights, tag annotations, value annotations, and titles
+can each be enabled or disabled independently. `:FIX annotations all` toggles
+every scope, and `:FIX annotations group|tag|value|title` toggles one scope.
 
 Omit a `formatter` field to use the built-in formatter. The wrapped
 `require(...)` form above is safe for plugin-manager `opts` tables because the
@@ -251,6 +271,30 @@ the rendered title string. Use `*` as a wildcard for either side. The route
 by direction, `"sender"` groups by sender, and `"pair"` groups each
 sender/target pair separately.
 
+#### Repeating Groups
+
+Repeating-group annotations show where each field belongs in the message
+structure. For example, the second `MDEntryPx` field in `NoMDEntries` is
+annotated as `NoMDEntries/2/MDEntryPx`. Nested groups extend the same path with
+each parent group and entry number.
+
+`annotate.group.path.enabled` controls these paths. When disabled, fields keep
+their normal names, such as `MDEntryPx`. `annotate.group.highlight.enabled`
+controls the alternating group colors. The `target` setting chooses whether
+those colors apply to the raw `tag=value` text, its inline annotations, or
+`"both"`. Nested groups use successive palette entries based on their depth and
+entry number; replace `palette` with your own Neovim highlight group names to
+customize the colors.
+
+`:FIX annotations group` toggles group paths and colors together without
+disabling tag, value, or title annotations. Group annotations require group
+structure in the active dictionary: QuickFIX XML uses `<group>` elements, while
+FIX Repository directories use `Messages.xml`, `MsgContents.xml`, and
+`Components.xml`. Bundled dictionaries already include this information.
+
+`annotate.group.visual` is a deprecated alias for `annotate.group.highlight`.
+Using it emits a warning, and `highlight` wins if both are set.
+
 `annotate.title.position` controls where the message title is shown:
 
 - `"above"` and `"below"` render a virtual line around the FIX message.
@@ -263,6 +307,37 @@ sender/target pair separately.
 `conceallevel=2`. `annotate.message` is kept as a deprecated alias for
 `annotate.title`; using it emits a warning, and `annotate.title` wins if both
 are set.
+
+### Highlight Groups
+
+fix.nvim defines the following highlight groups. Defaults follow
+`vim.o.background`; existing user definitions are preserved.
+
+| Group | Dark background | Light background | Used for |
+| --- | --- | --- | --- |
+| `FixRoute1` | `#4da3ff` | `#005fcb` | Route palette slot 1 |
+| `FixRoute2` | `#3ecf5f` | `#007a33` | Route palette slot 2 |
+| `FixRoute3` | `#ffb02e` | `#8a5200` | Route palette slot 3 |
+| `FixRoute4` | `#c678ff` | `#7a2ebf` | Route palette slot 4 |
+| `FixRoute5` | `#00c8d7` | `#007c89` | Route palette slot 5 |
+| `FixRoute6` | `#ff5f7a` | `#b00030` | Route palette slot 6 |
+| `FixRoute7` | `#f0f3ff` | `#334155` | Route palette slot 7 |
+| `FixRoute8` | `#ff7a18` | `#a13f00` | Route palette slot 8 |
+| `FixGroupDepth1A` | `#243447` | `#e7f0ff` | Group palette slot 1 |
+| `FixGroupDepth1B` | `#243b2f` | `#e6f5ea` | Group palette slot 2 |
+| `FixGroupDepth2A` | `#3a2d1f` | `#fff0d8` | Group palette slot 3 |
+| `FixGroupDepth2B` | `#332943` | `#f0e8ff` | Group palette slot 4 |
+| `FixGroupDepth3A` | `#20383c` | `#e2f6f8` | Group palette slot 5 |
+| `FixGroupDepth3B` | `#422630` | `#ffe7ee` | Group palette slot 6 |
+
+Route groups use bold foreground colors; repeating-group groups use background
+colors. Group colors advance by depth and entry, then wrap through the palette.
+
+The plugin also reuses standard Neovim groups: `Comment` for default tag and
+value annotations, `Operator` in the picker, and `IncSearch` for yank feedback.
+FIX syntax highlighting uses the standard tree-sitter captures `@comment`,
+`@property`, `@operator`, `@normal`, `@constant`, `@number`,
+`@punctuation.delimiter`, and `@none`.
 
 ### Cache
 

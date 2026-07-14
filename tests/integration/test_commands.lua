@@ -40,8 +40,28 @@ T["FIX annotations message toggle remains a legacy alias"] = function()
     H.expect_virt_lines_count(nvim(), 0)
 end
 
+T["FIX annotations group restores path and highlight flags"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { group = { highlight = { enabled = false } } } })]])
+    H.load_fixture(nvim(), "4.4.fix")
+
+    nvim().cmd("FIX annotations group")
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.path.enabled]]), false)
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), false)
+
+    nvim().cmd("FIX annotations group")
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.path.enabled]]), true)
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), false)
+end
+
 T["FIX annotations all off then on restores per-scope flags"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { title = { position = "above" } } })]])
+    nvim().lua([[
+        require("fix").setup({
+            annotate = {
+                title = { position = "above" },
+                group = { highlight = { enabled = false } },
+            },
+        })
+    ]])
     H.load_fixture(nvim(), "4.4.fix")
     nvim().cmd("FIX annotations title")
     local pre_off_count = #H.get_extmarks(nvim())
@@ -51,6 +71,8 @@ T["FIX annotations all off then on restores per-scope flags"] = function()
     MiniTest.expect.equality(#H.get_extmarks(nvim()), pre_off_count)
     -- Title scope must remain off after restore.
     H.expect_virt_lines_count(nvim(), 0)
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.path.enabled]]), true)
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), false)
 end
 
 T["FIX annotations without scope toggles all"] = function()

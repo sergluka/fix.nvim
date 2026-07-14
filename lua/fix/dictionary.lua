@@ -2,6 +2,7 @@ local xml2lua = require("xml2lua")
 
 ---@alias FixMessageType integer
 ---@alias FieldsDef  { [number]: FieldDef }
+---@alias GroupDefsByTag table<integer, GroupDef>
 
 ---@class MessageDef
 ---@field type FixMessageType
@@ -14,6 +15,13 @@ local xml2lua = require("xml2lua")
 ---@field name string
 ---@field type string
 ---@field description string
+
+---@class GroupDef
+---@field name string
+---@field count_tag integer
+---@field delimiter_tag integer?
+---@field member_tags table<integer, boolean>
+---@field groups_by_count GroupDefsByTag
 
 ---@class EnumDef
 ---@field name string
@@ -34,6 +42,7 @@ local xml2lua = require("xml2lua")
 ---@field private _fields   table<integer, FieldDef>
 ---@field private _enums    table<string, EnumDef>
 ---@field private _tags     table<integer, FixTagDecoder>
+---@field private _groups   table<string, GroupDefsByTag>
 
 ---@class DictionarySource
 ---@field key string
@@ -42,6 +51,9 @@ local xml2lua = require("xml2lua")
 ---@field path string
 ---@field fields_path? string
 ---@field enums_path? string
+---@field messages_path? string
+---@field msg_contents_path? string
+---@field components_path? string
 ---@field tags? table<integer, FixTagDecoder>
 ---@field tags_fingerprint? string
 
@@ -205,6 +217,9 @@ local function bundled_source(version, tags, tags_fingerprint)
         path = dir,
         fields_path = dir .. "Fields.xml",
         enums_path = dir .. "Enums.xml",
+        messages_path = dir .. "Messages.xml",
+        msg_contents_path = dir .. "MsgContents.xml",
+        components_path = dir .. "Components.xml",
         tags = tags,
         tags_fingerprint = tags_fingerprint,
     }
@@ -288,6 +303,229 @@ local function load_enums(dir, file)
     return dict
 end
 
+local function field_by_name(fields)
+    local by_name = {}
+    for tag, field in pairs(fields) do
+        by_name[field.name] = tag
+    end
+    return by_name
+end
+
+local function group_member_tags(children)
+    local tags = {}
+    for _, child in ipairs(children) do
+        if child.kind == "field" then
+            tags[child.tag] = true
+        elseif child.kind == "group" then
+            tags[child.count_tag] = true
+        end
+    end
+    return tags
+end
+
+local function group_defs_by_count(children)
+    local groups = {}
+    for _, child in ipairs(children) do
+        if child.kind == "group" then
+            groups[child.count_tag] = child
+        end
+    end
+    return groups
+end
+
+local function first_child_tag(children)
+    for _, child in ipairs(children) do
+        if child.kind == "field" then
+            return child.tag
+        elseif child.kind == "group" then
+            return child.count_tag
+        end
+    end
+end
+
+local function new_group(name, count_tag, children)
+    return {
+        kind = "group",
+        name = name,
+        count_tag = count_tag,
+        delimiter_tag = first_child_tag(children),
+        member_tags = group_member_tags(children),
+        groups_by_count = group_defs_by_count(children),
+    }
+end
+
+local function can_count_group(field)
+    if not field then
+        return false
+    end
+    local field_type = field.type
+    if type(field_type) == "string" and field_type:lower() == "numingroup" then
+        return true
+    end
+    return type(field.name) == "string" and field.name:match("^No") ~= nil
+end
+
+---@param children table[]
+---@param start integer
+---@param parent_indent integer
+---@param fields FieldsDef
+---@return table[], integer
+local function grouped_by_indent(children, start, parent_indent, fields)
+    local grouped = {}
+    local index = start
+    while index <= #children do
+        local child = children[index]
+        local indent = child.indent or 0
+        if indent <= parent_indent then
+            break
+        end
+
+        if child.kind == "field" and can_count_group(fields[child.tag]) then
+            local nested, next_index = grouped_by_indent(children, index + 1, indent, fields)
+            if #nested > 0 then
+                grouped[#grouped + 1] = new_group(fields[child.tag].name, child.tag, nested)
+                index = next_index
+            else
+                grouped[#grouped + 1] = child
+                index = index + 1
+            end
+        else
+            grouped[#grouped + 1] = child
+            index = index + 1
+        end
+    end
+    return grouped, index
+end
+
+local function repository_structure_paths(dir)
+    local messages_path = dir .. "Messages.xml"
+    local msg_contents_path = dir .. "MsgContents.xml"
+    local components_path = dir .. "Components.xml"
+    if
+        vim.uv.fs_stat(messages_path) == nil
+        or vim.uv.fs_stat(msg_contents_path) == nil
+        or vim.uv.fs_stat(components_path) == nil
+    then
+        return nil
+    end
+    return messages_path, msg_contents_path, components_path
+end
+
+local function load_repository_groups(dir, fields)
+    local messages_path, msg_contents_path, components_path = repository_structure_paths(dir)
+    if not messages_path then
+        return {}
+    end
+
+    local messages_xml = parse_file(messages_path)
+    local contents_xml = parse_file(msg_contents_path)
+    local components_xml = parse_file(components_path)
+
+    local components_by_name = {}
+    for _, component in ipairs(as_list(components_xml.Components.Component)) do
+        local id = tonumber(text(component.ComponentID))
+        local name = text(component.Name)
+        if id and name then
+            local def = {
+                id = id,
+                name = name,
+                component_type = text(component.ComponentType) or "",
+            }
+            components_by_name[name] = def
+        end
+    end
+
+    local contents_by_component = {}
+    for _, content in ipairs(as_list(contents_xml.MsgContents.MsgContent)) do
+        local component_id = tonumber(text(content.ComponentID))
+        local tag_text = text(content.TagText)
+        if component_id and tag_text then
+            local list = contents_by_component[component_id] or {}
+            list[#list + 1] = {
+                tag_text = tag_text,
+                indent = tonumber(text(content.Indent)) or 0,
+                position = tonumber(text(content.Position)) or 0,
+            }
+            contents_by_component[component_id] = list
+        end
+    end
+    for _, list in pairs(contents_by_component) do
+        table.sort(list, function(lhs, rhs)
+            return lhs.position < rhs.position
+        end)
+    end
+
+    local function component_children(component_id, seen, base_indent)
+        if seen[component_id] then
+            return {}
+        end
+        seen[component_id] = true
+
+        local children = {}
+        for _, content in ipairs(contents_by_component[component_id] or {}) do
+            local indent = base_indent + content.indent
+            local tag = tonumber(content.tag_text)
+            if tag then
+                children[#children + 1] = { kind = "field", tag = tag, indent = indent }
+            else
+                local component = components_by_name[content.tag_text]
+                if component then
+                    local nested = component_children(component.id, seen, indent)
+                    if component.component_type:find("Repeating", 1, true) then
+                        local count = first_child_tag(nested)
+                        if count and fields[count] then
+                            table.remove(nested, 1)
+                            children[#children + 1] = new_group(fields[count].name, count, nested)
+                        end
+                    else
+                        vim.list_extend(children, nested)
+                    end
+                end
+            end
+        end
+
+        seen[component_id] = nil
+        return children
+    end
+
+    local groups = {}
+    for _, message in ipairs(as_list(messages_xml.Messages.Message)) do
+        local msg_type = text(message.MsgType)
+        local component_id = tonumber(text(message.ComponentID))
+        if msg_type and component_id then
+            local children = component_children(component_id, {}, 0)
+            groups[msg_type] = group_defs_by_count(grouped_by_indent(children, 1, -1, fields))
+        end
+    end
+
+    return groups
+end
+
+local function load_quickfix_group(group, by_name)
+    local name = attr(group, "name")
+    local count_tag = name and by_name[name] or nil
+    if not count_tag then
+        return nil
+    end
+
+    local children = {}
+    for _, field in ipairs(as_list(group.field or group.Field)) do
+        local field_name = attr(field, "name")
+        local tag = field_name and by_name[field_name] or nil
+        if tag then
+            children[#children + 1] = { kind = "field", tag = tag }
+        end
+    end
+    for _, nested in ipairs(as_list(group.group or group.Group)) do
+        local nested_group = load_quickfix_group(nested, by_name)
+        if nested_group then
+            children[#children + 1] = nested_group
+        end
+    end
+
+    return new_group(name, count_tag, children)
+end
+
 local function load_quickfix(path)
     local xml = parse_file(path)
     local root = xml.fix or xml.FIX
@@ -321,6 +559,8 @@ local function load_quickfix(path)
         end
     end
 
+    local groups = {}
+    local by_name = field_by_name(fields)
     local messages_root = root.messages or root.Messages
     if messages_root then
         for _, message in ipairs(as_list(messages_root.message or messages_root.Message)) do
@@ -332,10 +572,20 @@ local function load_quickfix(path)
                     description = name,
                 }
             end
+            if msgtype then
+                local children = {}
+                for _, group in ipairs(as_list(message.group or message.Group)) do
+                    local group_def = load_quickfix_group(group, by_name)
+                    if group_def then
+                        children[#children + 1] = group_def
+                    end
+                end
+                groups[msgtype] = group_defs_by_count(children)
+            end
         end
     end
 
-    return fields, enums
+    return fields, enums, groups
 end
 
 ---@param source DictionarySource
@@ -344,14 +594,16 @@ local function load_source(source)
         return load_quickfix(source.path)
     end
 
-    return load_fields(source.path, "Fields.xml"), load_enums(source.path, "Enums.xml")
+    local fields = load_fields(source.path, "Fields.xml")
+    return fields, load_enums(source.path, "Enums.xml"), load_repository_groups(source.path, fields)
 end
 
-function M.new(fields, enums, tags)
+function M.new(fields, enums, tags, groups)
     local self = {
         _fields = fields or {},
         _enums = enums or {},
         _tags = tags or {},
+        _groups = groups or {},
     }
     setmetatable(self, { __index = M }) -- __index is set here
     return self
@@ -377,8 +629,8 @@ function M.load(version)
 
     vim.notify("fix.nvim: Loading FIX dictionary for version " .. source.version, vim.log.levels.DEBUG)
 
-    local fields, enums = load_source(source)
-    local dict = M.new(fields, enums, source.tags)
+    local fields, enums, groups = load_source(source)
+    local dict = M.new(fields, enums, source.tags, groups)
     M._cache[source.key] = dict
 
     return dict
@@ -481,6 +733,9 @@ local function detect_repository_source(path, explicit_version)
         path = dir,
         fields_path = fields_path,
         enums_path = enums_path,
+        messages_path = dir .. "Messages.xml",
+        msg_contents_path = dir .. "MsgContents.xml",
+        components_path = dir .. "Components.xml",
     }
 end
 
@@ -691,6 +946,9 @@ function M.fingerprint()
         if source.format == "repository" then
             parts[#parts + 1] = fingerprint_part(source.fields_path)
             parts[#parts + 1] = fingerprint_part(source.enums_path)
+            parts[#parts + 1] = fingerprint_part(source.messages_path)
+            parts[#parts + 1] = fingerprint_part(source.msg_contents_path)
+            parts[#parts + 1] = fingerprint_part(source.components_path)
         else
             parts[#parts + 1] = fingerprint_part(source.path)
         end
@@ -764,6 +1022,12 @@ end
 ---@param value string
 function M:message(value)
     return self:enum(35, value)
+end
+
+---@param msg_type string
+---@return GroupDefsByTag|nil
+function M:groups(msg_type)
+    return self._groups[msg_type]
 end
 
 return M

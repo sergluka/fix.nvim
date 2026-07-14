@@ -65,7 +65,7 @@ function M.load_into_cache(buf)
         or data.fallback_version ~= opts().fallback_version
         or type(data.entries) ~= "table"
     then
-        Log.warn("discarding stale or corrupt cache file: " .. path)
+        vim.print("discarding stale or corrupt cache file: " .. path)
         return
     end
     Cache.merge(data.entries)

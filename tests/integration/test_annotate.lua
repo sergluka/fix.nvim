@@ -58,6 +58,47 @@ local function row_has_conceal(row)
     return false
 end
 
+local function group_highlight_count()
+    local count = 0
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        if type(mark.details.hl_group) == "string" and mark.details.hl_group:match("^FixGroupDepth") then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function has_group_highlight(highlight)
+    if type(highlight) == "string" then
+        return highlight:match("^FixGroupDepth") ~= nil
+    end
+    if type(highlight) == "table" then
+        for _, group in ipairs(highlight) do
+            if has_group_highlight(group) then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function group_annotation_highlight_count()
+    local count = 0
+    for _, mark in ipairs(H.get_extmarks(nvim())) do
+        local vt = mark.details.virt_text
+        if vt and mark.details.virt_text_pos == "inline" and has_group_highlight(vt[1][2]) then
+            count = count + 1
+        end
+    end
+    return count
+end
+
+local function setup_group_highlight_target(target)
+    nvim().lua(
+        string.format([[require("fix").setup({ annotate = { group = { highlight = { target = %q } } } })]], target)
+    )
+end
+
 T["4.4.fix tag extmarks contain field names"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     H.expect_inline_label(nvim(), "BeginString")
@@ -535,6 +576,152 @@ T["custom tag setup change clears semantic cache"] = function()
 
     H.expect_inline_label(nvim(), "SecondCustomLabel")
     H.expect_no_inline_label(nvim(), "FirstCustomLabel")
+end
+
+T["repeating group fields render group path labels and group highlights"] = function()
+    set_fix_lines({
+        "8=FIX.4.4|9=120|35=W|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|"
+            .. "55=BTCUSD|268=2|269=0|270=100.25|271=500|269=1|270=100.30|271=300|10=057|",
+    })
+
+    H.expect_inline_label(nvim(), "NoMDEntries")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntryType")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntryPx")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntrySize")
+    H.expect_inline_label(nvim(), "NoMDEntries/2/MDEntryType")
+    H.expect_inline_label(nvim(), "NoMDEntries/2/MDEntryPx")
+    H.expect_inline_label(nvim(), "NoMDEntries/2/MDEntrySize")
+    MiniTest.expect.equality(group_highlight_count() >= 2, true)
+    MiniTest.expect.equality(group_annotation_highlight_count() >= 6, true)
+end
+
+T["repeating group highlight target raw colors raw fields only"] = function()
+    setup_group_highlight_target("raw")
+    set_fix_lines({
+        "8=FIX.4.4|9=120|35=W|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|"
+            .. "55=BTCUSD|268=1|269=0|270=100.25|271=500|10=057|",
+    })
+
+    MiniTest.expect.equality(group_highlight_count() >= 1, true)
+    MiniTest.expect.equality(group_annotation_highlight_count(), 0)
+end
+
+T["repeating group highlight target annotation colors annotations only"] = function()
+    setup_group_highlight_target("annotation")
+    set_fix_lines({
+        "8=FIX.4.4|9=120|35=W|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|"
+            .. "55=BTCUSD|268=1|269=0|270=100.25|271=500|10=057|",
+    })
+
+    MiniTest.expect.equality(group_highlight_count(), 0)
+    MiniTest.expect.equality(group_annotation_highlight_count() >= 3, true)
+end
+
+T["repeating group highlight target rejects invalid values"] = function()
+    local err = nvim().lua_get([[
+        select(2, pcall(function()
+            require("fix").setup({ annotate = { group = { highlight = { target = "buffer" } } } })
+        end))
+    ]])
+
+    MiniTest.expect.equality(err:find("annotate.group.highlight.target", 1, true) ~= nil, true)
+end
+
+T["legacy group visual config warns and maps to highlight"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { group = { visual = { enabled = false } } } })]])
+
+    H.expect_notified(nvim(), "annotate%.group%.visual is deprecated")
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), false)
+end
+
+T["group highlight config wins over legacy visual config"] = function()
+    nvim().lua([[
+        require("fix").setup({
+            annotate = { group = { highlight = { enabled = true }, visual = { enabled = false } } },
+        })
+    ]])
+
+    H.expect_notified(nvim(), "annotate%.group%.visual is deprecated")
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), true)
+end
+
+T["older repository FIX versions render repeating group paths"] = function()
+    set_fix_lines({
+        "8=FIX.4.2|9=120|35=W|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|"
+            .. "55=BTCUSD|268=1|269=0|270=100.25|271=500|10=057|",
+    })
+
+    H.expect_inline_label(nvim(), "NoMDEntries")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntryType")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntryPx")
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntrySize")
+    MiniTest.expect.equality(group_highlight_count() >= 1, true)
+end
+
+T["group annotations can be toggled independently"] = function()
+    set_fix_lines({
+        "8=FIX.4.4|9=120|35=W|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|"
+            .. "55=BTCUSD|268=1|269=0|270=100.25|271=500|10=057|",
+    })
+
+    H.expect_inline_label(nvim(), "NoMDEntries/1/MDEntryType")
+    nvim().cmd("FIX annotations group")
+    H.wait_annotated(nvim())
+    H.expect_no_inline_label(nvim(), "NoMDEntries/1/MDEntryType")
+    H.expect_inline_label(nvim(), "MDEntryType")
+    MiniTest.expect.equality(group_highlight_count(), 0)
+end
+
+T["nested quickfix groups render recursive group path labels"] = function()
+    local path = nvim().lua_get([[
+        (function()
+            local path = vim.fn.tempname() .. ".xml"
+            vim.fn.writefile({
+                "<fix major='4' type='FIX' minor='4'>",
+                " <messages>",
+                "  <message name='NestedGroupMessage' msgtype='Z' msgcat='app'>",
+                "   <group name='NoOuter' required='Y'>",
+                "    <field name='OuterField' required='Y'/>",
+                "    <group name='NoInner' required='Y'>",
+                "     <field name='InnerFieldA' required='Y'/>",
+                "     <field name='InnerFieldB' required='Y'/>",
+                "    </group>",
+                "   </group>",
+                "  </message>",
+                " </messages>",
+                " <fields>",
+                "  <field number='8' name='BeginString' type='STRING'/>",
+                "  <field number='9' name='BodyLength' type='LENGTH'/>",
+                "  <field number='10' name='CheckSum' type='STRING'/>",
+                "  <field number='35' name='MsgType' type='STRING'>"
+                    .. "<value enum='Z' description='NestedGroupMessage'/></field>",
+                "  <field number='1000' name='NoOuter' type='NUMINGROUP'/>",
+                "  <field number='1001' name='OuterField' type='STRING'/>",
+                "  <field number='2000' name='NoInner' type='NUMINGROUP'/>",
+                "  <field number='2001' name='InnerFieldA' type='STRING'/>",
+                "  <field number='2002' name='InnerFieldB' type='STRING'/>",
+                " </fields>",
+                "</fix>",
+            }, path)
+            return path
+        end)()
+    ]])
+    nvim().lua(
+        string.format(
+            [[require("fix").setup({ dictionaries = { ["FIX.4.4"] = { path = %q, mode = "quickfix" } } })]],
+            path
+        )
+    )
+    set_fix_lines({
+        "8=FIX.4.4|9=80|35=Z|1000=1|1001=OUTER|2000=2|2001=A|2002=B|2001=C|2002=D|10=000|",
+    })
+
+    H.expect_inline_label(nvim(), "NoOuter/1/OuterField")
+    H.expect_inline_label(nvim(), "NoOuter/1/NoInner")
+    H.expect_inline_label(nvim(), "NoOuter/1/NoInner/1/InnerFieldA")
+    H.expect_inline_label(nvim(), "NoOuter/1/NoInner/1/InnerFieldB")
+    H.expect_inline_label(nvim(), "NoOuter/1/NoInner/2/InnerFieldA")
+    H.expect_inline_label(nvim(), "NoOuter/1/NoInner/2/InnerFieldB")
 end
 
 return T

@@ -1,4 +1,3 @@
--- TODO: support groups
 -- TODO: competition?
 -- TODO: validation?
 -- TODO: highlight values based on Type
@@ -8,6 +7,14 @@
 ---@field ft.extensions? string[]
 ---@field ft.pattern? string[]
 ---@field annotate? table
+---@field annotate.group? table
+---@field annotate.group.path? table
+---@field annotate.group.path.enabled? boolean
+---@field annotate.group.highlight? table
+---@field annotate.group.highlight.enabled? boolean
+---@field annotate.group.highlight.palette? string[]
+---@field annotate.group.highlight.target? "raw"|"annotation"|"both"
+---@field annotate.group.visual? table Deprecated alias for annotate.group.highlight.
 ---@field annotate.tag? table
 ---@field annotate.tag.enabled? boolean
 ---@field annotate.tag.formatter? fun(field: Field): {text: string, highlight: string}
@@ -65,6 +72,23 @@ local default_settings = {
         pattern = { ".*%.fix.txt" },
     },
     annotate = {
+        group = {
+            path = {
+                enabled = true,
+            },
+            highlight = {
+                enabled = true,
+                target = "both",
+                palette = {
+                    "FixGroupDepth1A",
+                    "FixGroupDepth1B",
+                    "FixGroupDepth2A",
+                    "FixGroupDepth2B",
+                    "FixGroupDepth3A",
+                    "FixGroupDepth3B",
+                },
+            },
+        },
         tag = {
             enabled = true,
             formatter = TagFormatter.default,
@@ -123,6 +147,17 @@ local function normalize_opts(opts)
         end
         annotate.message = nil
     end
+    local group = type(annotate) == "table" and annotate.group or nil
+    if type(group) == "table" and group.visual ~= nil then
+        vim.notify_once(
+            "fix.nvim: annotate.group.visual is deprecated; use annotate.group.highlight",
+            vim.log.levels.WARN
+        )
+        if group.highlight == nil then
+            group.highlight = group.visual
+        end
+        group.visual = nil
+    end
     return normalized
 end
 
@@ -153,6 +188,7 @@ local function validate_opts(opts, dictionaries)
     end
 
     local route = opts.annotate.title.route
+    local group_highlight = opts.annotate.group.highlight
     local title_position = opts.annotate.title.position
     if
         title_position ~= "above"
@@ -194,6 +230,21 @@ local function validate_opts(opts, dictionaries)
     if route.resolver ~= nil and type(route.resolver) ~= "function" then
         error("fix.nvim: annotate.title.route.resolver must be a function", 2)
     end
+    if type(group_highlight.palette) ~= "table" or #group_highlight.palette == 0 then
+        error("fix.nvim: annotate.group.highlight.palette must contain at least one highlight group", 2)
+    end
+    if
+        group_highlight.target ~= "raw"
+        and group_highlight.target ~= "annotation"
+        and group_highlight.target ~= "both"
+    then
+        error("fix.nvim: annotate.group.highlight.target must be 'raw', 'annotation', or 'both'", 2)
+    end
+    for _, group in ipairs(group_highlight.palette) do
+        if type(group) ~= "string" or group == "" then
+            error("fix.nvim: annotate.group.highlight.palette must contain highlight group names", 2)
+        end
+    end
 end
 
 local route_highlight_palettes = {
@@ -219,6 +270,25 @@ local route_highlight_palettes = {
     },
 }
 
+local group_highlight_palettes = {
+    dark = {
+        FixGroupDepth1A = { bg = "#243447" },
+        FixGroupDepth1B = { bg = "#243b2f" },
+        FixGroupDepth2A = { bg = "#3a2d1f" },
+        FixGroupDepth2B = { bg = "#332943" },
+        FixGroupDepth3A = { bg = "#20383c" },
+        FixGroupDepth3B = { bg = "#422630" },
+    },
+    light = {
+        FixGroupDepth1A = { bg = "#e7f0ff" },
+        FixGroupDepth1B = { bg = "#e6f5ea" },
+        FixGroupDepth2A = { bg = "#fff0d8" },
+        FixGroupDepth2B = { bg = "#f0e8ff" },
+        FixGroupDepth3A = { bg = "#e2f6f8" },
+        FixGroupDepth3B = { bg = "#ffe7ee" },
+    },
+}
+
 ---@param spec table
 ---@return number|nil
 local function highlight_fg(spec)
@@ -233,16 +303,18 @@ end
 ---@param spec table
 ---@return boolean
 local function same_highlight(current, spec)
-    return current.fg == highlight_fg(spec) and current.bold == spec.bold
+    return current.fg == highlight_fg(spec)
+        and current.bg == highlight_fg({ fg = spec.bg })
+        and current.bold == spec.bold
 end
 
 ---@param current table
 ---@return boolean
-local function is_default_route_highlight(current)
+local function is_default_highlight(current, palettes)
     if vim.tbl_isempty(current) then
         return true
     end
-    for _, palette in pairs(route_highlight_palettes) do
+    for _, palette in pairs(palettes) do
         for _, spec in pairs(palette) do
             if same_highlight(current, spec) then
                 return true
@@ -256,7 +328,15 @@ local function register_highlights()
     local route_highlights = route_highlight_palettes[vim.o.background] or route_highlight_palettes.dark
     for group, spec in pairs(route_highlights) do
         local current = vim.api.nvim_get_hl(0, { name = group, link = false })
-        if is_default_route_highlight(current) then
+        if is_default_highlight(current, route_highlight_palettes) then
+            vim.api.nvim_set_hl(0, group, spec)
+        end
+    end
+
+    local group_highlights = group_highlight_palettes[vim.o.background] or group_highlight_palettes.dark
+    for group, spec in pairs(group_highlights) do
+        local current = vim.api.nvim_get_hl(0, { name = group, link = false })
+        if is_default_highlight(current, group_highlight_palettes) then
             vim.api.nvim_set_hl(0, group, spec)
         end
     end
@@ -373,7 +453,7 @@ function M.setup(opts)
     end
 end
 
----@param scope? "all" | "tag" | "value" | "title" | "message"
+---@param scope? "all" | "tag" | "value" | "title" | "message" | "group"
 function M.annotate_toggle(scope)
     local buf = vim.api.nvim_get_current_buf()
     if vim.bo[buf].filetype ~= "fix" then
@@ -384,16 +464,22 @@ function M.annotate_toggle(scope)
         local someone_is_enabled = M.opts.annotate.tag.enabled
             or M.opts.annotate.value.enabled
             or M.opts.annotate.title.enabled
+            or M.opts.annotate.group.path.enabled
+            or M.opts.annotate.group.highlight.enabled
 
         if someone_is_enabled then
             M.opts_initial = vim.deepcopy(M.opts)
             M.opts.annotate.tag.enabled = false
             M.opts.annotate.value.enabled = false
             M.opts.annotate.title.enabled = false
+            M.opts.annotate.group.path.enabled = false
+            M.opts.annotate.group.highlight.enabled = false
         else
             M.opts.annotate.tag.enabled = M.opts_initial.annotate.tag.enabled
             M.opts.annotate.value.enabled = M.opts_initial.annotate.value.enabled
             M.opts.annotate.title.enabled = M.opts_initial.annotate.title.enabled
+            M.opts.annotate.group.path.enabled = M.opts_initial.annotate.group.path.enabled
+            M.opts.annotate.group.highlight.enabled = M.opts_initial.annotate.group.highlight.enabled
         end
     elseif scope == "tag" then
         M.opts.annotate.tag.enabled = not M.opts.annotate.tag.enabled
@@ -401,6 +487,16 @@ function M.annotate_toggle(scope)
         M.opts.annotate.value.enabled = not M.opts.annotate.value.enabled
     elseif scope == "title" or scope == "message" then
         M.opts.annotate.title.enabled = not M.opts.annotate.title.enabled
+    elseif scope == "group" then
+        local group = M.opts.annotate.group
+        if group.path.enabled or group.highlight.enabled then
+            group.path.enabled = false
+            group.highlight.enabled = false
+        else
+            group.path.enabled = M.opts_initial.annotate.group.path.enabled
+            group.highlight.enabled = M.opts_initial.annotate.group.highlight.enabled
+        end
+        Cache.drop_render()
     end
 
     Render.rerender(buf)

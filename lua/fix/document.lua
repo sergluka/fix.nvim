@@ -6,6 +6,8 @@ local Message = require("fix.message")
 
 local M = {}
 local FixTag = Consts.FixTag
+local annotate_groups
+local annotate_repeating_group
 
 local versions = {
     ["FIX.2.7"] = Consts.FixVersion.FIX_2_7,
@@ -98,6 +100,124 @@ local function decode(semantic)
     local ctx = { version = semantic.version, fields = semantic.fields, dictionary = dict }
     for _, field in ipairs(semantic.fields) do
         dict:decode(field, ctx)
+    end
+
+    local msg_type
+    for _, field in ipairs(semantic.fields) do
+        if field.tag == FixTag.MsgType then
+            msg_type = field.value
+            break
+        end
+    end
+    if msg_type then
+        local groups = dict:groups(msg_type)
+        if groups then
+            annotate_groups(semantic.fields, groups)
+        end
+    end
+end
+
+local function group_instance_key(stack, limit)
+    local parts = {}
+    for depth = 1, limit or #stack do
+        local entry = stack[depth]
+        parts[#parts + 1] = entry.name
+        parts[#parts + 1] = tostring(entry.index)
+    end
+    return table.concat(parts, "/")
+end
+
+---@param field Field
+---@param stack table[]
+local function annotate_group_field(field, stack)
+    if #stack == 0 then
+        return
+    end
+
+    local parts = {}
+    local instances = {}
+    for depth, entry in ipairs(stack) do
+        parts[#parts + 1] = entry.name
+        parts[#parts + 1] = tostring(entry.index)
+        instances[#instances + 1] = {
+            key = group_instance_key(stack, depth),
+            depth = depth,
+            index = entry.index,
+            name = entry.name,
+        }
+    end
+    parts[#parts + 1] = field.tag_text or tostring(field.tag)
+    field.group_path_text = table.concat(parts, "/")
+    field.group_instances = instances
+end
+
+---@param fields Field[]
+---@param start_index integer
+---@param group GroupDef
+---@param stack table[]
+---@return integer next_index, boolean consumed
+local function annotate_group_entry(fields, start_index, group, stack)
+    local index = start_index
+    local consumed = false
+    while index <= #fields do
+        local field = fields[index]
+        if consumed and field.tag == group.delimiter_tag then
+            break
+        end
+
+        local nested = group.groups_by_count[field.tag]
+        if nested then
+            annotate_group_field(field, stack)
+            index = annotate_repeating_group(fields, index, nested, stack)
+            consumed = true
+        elseif group.member_tags[field.tag] then
+            annotate_group_field(field, stack)
+            index = index + 1
+            consumed = true
+        else
+            break
+        end
+    end
+    return index, consumed
+end
+
+---@param fields Field[]
+---@param count_index integer
+---@param group GroupDef
+---@param parent_stack table[]
+---@return integer
+annotate_repeating_group = function(fields, count_index, group, parent_stack)
+    local count_field = fields[count_index]
+    local count = tonumber(count_field.value) or 0
+    local index = count_index + 1
+
+    for entry_index = 1, count do
+        if index > #fields then
+            break
+        end
+        local stack = vim.deepcopy(parent_stack)
+        stack[#stack + 1] = { name = group.name, index = entry_index }
+        local next_index, consumed = annotate_group_entry(fields, index, group, stack)
+        if not consumed or next_index == index then
+            break
+        end
+        index = next_index
+    end
+
+    return index
+end
+
+---@param fields Field[]
+---@param groups GroupDefsByTag
+annotate_groups = function(fields, groups)
+    local index = 1
+    while index <= #fields do
+        local group = groups[fields[index].tag]
+        if group then
+            index = annotate_repeating_group(fields, index, group, {})
+        else
+            index = index + 1
+        end
     end
 end
 

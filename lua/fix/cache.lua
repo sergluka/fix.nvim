@@ -6,10 +6,18 @@
 ---@field col number
 ---@field virt_text table              -- {text, highlight} as returned by a formatter
 ---@field kind "tag"|"value"
+---@field group_highlight? string
+
+---@class FixGroupRange
+---@field start_col number
+---@field end_col number
+---@field depth number
+---@field index number
 
 ---@class FixRenderPayload
 ---@field title? table                 -- virt_lines payload from the message formatter
 ---@field marks FixRenderMark[]
+---@field group_ranges FixGroupRange[]
 
 local M = {}
 

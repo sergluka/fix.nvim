@@ -4,7 +4,7 @@ local M = {}
 --- @return {text: string, highlight: string} | nil
 ---@diagnostic disable-next-line: unused-local
 function M.default(field)
-    local tag = field.tag_text
+    local tag = field.group_path_text or field.tag_text
     if tag then
         return { "(" .. tag .. ")", "Comment" }
     end

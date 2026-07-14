@@ -35,6 +35,17 @@ T["load version"]["resolves BeginString and Heartbeat"] = function(version)
     MiniTest.expect.equality(dict:message("0").name, "Heartbeat")
 end
 
+T["load version"]["loads repository group structure"] = function(version)
+    local dict = Dictionary.load(version)
+    local count = 0
+    for _, groups in pairs(dict._groups or {}) do
+        if not vim.tbl_isempty(groups) then
+            count = count + 1
+        end
+    end
+    MiniTest.expect.equality(count > 0, true)
+end
+
 T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
     local fixt = Dictionary.load("FIXT.1.1")
     local sp2 = Dictionary.load("FIX.5.0SP2")
