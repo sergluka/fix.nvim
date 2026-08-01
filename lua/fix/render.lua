@@ -2,6 +2,7 @@ local Annotate = require("fix.annotate")
 local Cache = require("fix.cache")
 local Document = require("fix.document")
 local Persist = require("fix.persist")
+local Scan = require("fix.scan")
 
 local M = {}
 
@@ -12,12 +13,10 @@ local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 ---@field keys table<string, boolean>              -- every cache key seen in this buffer
 ---@field generation number
 ---@field line_count number                        -- tracked manually: on_lines runs in a fast context
----@field warm_next number                         -- next 0-based warm-up line
+---@field warm FixScanWalk                         -- background cache warm-up
 ---@field revealed table<number, boolean>          -- cursor rows shown raw in replace_front mode
----@field warm_timer? uv.uv_timer_t
 ---@field debounce_timer? uv.uv_timer_t
 ---@field dirty? { first: number, last: number }   -- 0-based, last exclusive
----@field idle boolean
 
 local states = {} ---@type table<number, FixRenderState>
 
@@ -98,25 +97,12 @@ local function sync_revealed_lines(buf)
     end
 end
 
----@param buf number
----@return { [1]: number, [2]: number }[] 0-based [first, last-exclusive) ranges
-local function viewport_ranges(buf)
-    local margin = opts().render.viewport_margin
-    local ranges = {}
-    for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-        local first = vim.fn.line("w0", win) - 1 - margin
-        local last = vim.fn.line("w$", win) + margin
-        ranges[#ranges + 1] = { math.max(first, 0), last }
-    end
-    return ranges
-end
-
 function M.refresh_viewport(buf)
     if not states[buf] then
         return
     end
     sync_revealed_lines(buf)
-    for _, range in ipairs(viewport_ranges(buf)) do
+    for _, range in ipairs(Scan.viewport_ranges(buf)) do
         render_lines(buf, range[1], range[2])
     end
 end
@@ -125,36 +111,30 @@ function M.refresh_cursor(buf)
     sync_revealed_lines(buf)
 end
 
-local function start_warmup(buf)
-    local state = states[buf]
-    if not state or state.warm_timer or state.idle then
-        return
-    end
-
-    local function tick()
-        state.warm_timer = nil
-        if not vim.api.nvim_buf_is_valid(buf) or states[buf] ~= state then
-            return
-        end
-        local o = opts()
-        local line_count = vim.api.nvim_buf_line_count(buf)
-        if state.warm_next >= line_count then
-            state.idle = true
-            Persist.save(buf, state.keys)
-            return
-        end
-        local stop = math.min(state.warm_next + o.render.lines_per_batch, line_count)
+---@param buf number
+---@param state FixRenderState
+---@return FixScanWalk
+local function warm_walk(buf, state)
+    return Scan.walk({
+        buf = buf,
+        alive = function()
+            return states[buf] == state
+        end,
+        line_count = function()
+            return vim.api.nvim_buf_line_count(buf)
+        end,
         -- Warm-up only fills the semantic cache; extmarks are placed for the
         -- viewport (and re-placed on scroll), never for the whole buffer.
-        for lnum = state.warm_next, stop - 1 do
-            local _, key = Document.build_line(buf, lnum)
-            state.keys[key] = true
-        end
-        state.warm_next = stop
-        state.warm_timer = vim.defer_fn(tick, 10)
-    end
-
-    state.warm_timer = vim.defer_fn(tick, 0)
+        on_batch = function(first, last)
+            for lnum = first, last - 1 do
+                local _, key = Document.build_line(buf, lnum)
+                state.keys[key] = true
+            end
+        end,
+        on_complete = function()
+            Persist.save(buf, state.keys)
+        end,
+    })
 end
 
 -- Pure-Lua bookkeeping; runs in the fast on_lines context — no nvim API here.
@@ -200,8 +180,7 @@ local function splice(state, first, last_old, last_new)
     end
 
     state.line_count = state.line_count + delta
-    state.idle = false
-    state.warm_next = math.min(state.warm_next, first)
+    state.warm:rewind(first)
 end
 
 local function schedule_debounced_render(buf)
@@ -226,7 +205,7 @@ local function schedule_debounced_render(buf)
         -- their virt_lines would keep rendering below the buffer forever.
         vim.api.nvim_buf_clear_namespace(buf, ns_id, vim.api.nvim_buf_line_count(buf), -1)
         M.refresh_viewport(buf)
-        start_warmup(buf)
+        state.warm:resume()
     end, opts().render.debounce_ms)
 end
 
@@ -260,10 +239,9 @@ function M.attach(buf)
         keys = {},
         generation = 0,
         line_count = vim.api.nvim_buf_line_count(buf),
-        warm_next = 0,
         revealed = {},
-        idle = false,
     }
+    state.warm = warm_walk(buf, state)
     states[buf] = state
 
     Persist.load_into_cache(buf)
@@ -285,9 +263,8 @@ function M.attach(buf)
                 st.rendered = {}
                 st.keys = {}
                 st.dirty = nil
-                st.warm_next = 0
                 st.revealed = {}
-                st.idle = false
+                st.warm:rewind(0)
                 vim.schedule(function()
                     if not vim.api.nvim_buf_is_valid(b) or states[b] ~= st then
                         return
@@ -333,7 +310,7 @@ function M.attach(buf)
                 return
             end
             M.refresh_viewport(buf)
-            start_warmup(buf)
+            state.warm:resume()
         end)
     end)
 end
@@ -345,10 +322,9 @@ function M.rerender(buf)
         return
     end
     state.generation = state.generation + 1
-    state.idle = false
-    state.warm_next = 0
+    state.warm:rewind(0)
     M.refresh_viewport(buf)
-    start_warmup(buf)
+    state.warm:resume()
 end
 
 function M.rerender_all()
@@ -369,16 +345,15 @@ function M.purge(buf)
     state.rendered = {}
     state.keys = {}
     state.generation = state.generation + 1
-    state.idle = false
-    state.warm_next = 0
+    state.warm:rewind(0)
     M.refresh_viewport(buf)
-    start_warmup(buf)
+    state.warm:resume()
 end
 
 --- True when warm-up finished and no edits are pending. Used by tests.
 function M.is_idle(buf)
     local state = states[buf]
-    return state ~= nil and state.idle and state.dirty == nil and state.debounce_timer == nil
+    return state ~= nil and state.warm.done and state.dirty == nil and state.debounce_timer == nil
 end
 
 --- Persist this buffer's semantic entries (async unless sync).
@@ -401,7 +376,7 @@ function M.detach(buf)
         return
     end
     states[buf] = nil
-    close_timer(state.warm_timer)
+    state.warm:cancel()
     close_timer(state.debounce_timer)
 end
 

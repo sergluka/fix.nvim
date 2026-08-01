@@ -86,6 +86,11 @@ local function register_commands()
         require("fix.snacks").open()
     end)
 
+    local tree = top_subparser:add_parser({ name = "tree", help = "Open FIX message tree" })
+    tree:set_execute(function()
+        require("fix.neo_tree").open()
+    end)
+
     local browse = top_subparser:add_parser({ name = "browse", help = "Open tag info online" })
     browse:set_execute(function()
         fix.browse_tag_online()

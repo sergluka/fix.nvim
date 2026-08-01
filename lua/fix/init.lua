@@ -2,6 +2,9 @@
 -- TODO: validation?
 -- TODO: highlight values based on Type
 
+---@alias FixTreeFormatterChunk { [1]: string, [2]: string? }
+---@alias FixTreeFormatterResult FixTreeFormatterChunk|FixTreeFormatterChunk[]
+
 ---@class FixOpts
 ---@field ft? table
 ---@field ft.extensions? string[]
@@ -42,6 +45,13 @@
 ---@field render.debounce_ms? number
 ---@field render.lines_per_batch? number
 ---@field render.viewport_margin? number
+---@field tree? table
+---@field tree.summary? table
+---@field tree.summary.formatter? fun(message: Message): FixTreeFormatterResult
+---@field tree.field? table
+---@field tree.field.formatter? fun(field: Field): FixTreeFormatterResult
+---@field tree.group? table
+---@field tree.group.formatter? fun(group: FixTreeGroup, field: Field): FixTreeFormatterResult
 ---@field fallback_version? string
 ---@field dictionaries? table<string|integer, string|FixDictionarySpec>
 
@@ -59,10 +69,20 @@ local Persist = require("fix.persist")
 local Render = require("fix.render")
 local TagFormatter = require("fix.formatters.tag")
 local TitleFormatter = require("fix.formatters.title")
+local TreeFieldFormatter = require("fix.formatters.tree.field")
+local TreeGroupFormatter = require("fix.formatters.tree.group")
+local TreeSummaryFormatter = require("fix.formatters.tree.summary")
 local ValueFormatter = require("fix.formatters.value")
 local Yank = require("fix.yank")
 
 local M = {}
+
+local function refresh_tree()
+    local tree = package.loaded["fix.neo_tree"]
+    if type(tree) == "table" and type(tree.refresh) == "function" then
+        tree.refresh()
+    end
+end
 
 local default_settings = {
     fallback_version = Consts.FixVersion.FIX_4_4,
@@ -132,6 +152,17 @@ local default_settings = {
         lines_per_batch = 500,
         viewport_margin = 50,
     },
+    tree = {
+        summary = {
+            formatter = TreeSummaryFormatter.default,
+        },
+        field = {
+            formatter = TreeFieldFormatter.default,
+        },
+        group = {
+            formatter = TreeGroupFormatter.default,
+        },
+    },
 }
 
 ---@param opts FixOpts|nil
@@ -185,6 +216,12 @@ local function validate_opts(opts, dictionaries)
 
     if persist.enabled and persist.max_files == false and persist.max_bytes == false then
         error("fix.nvim: cache.persist.max_files and max_bytes cannot both be false when persistence is enabled", 2)
+    end
+
+    for _, name in ipairs({ "summary", "field", "group" }) do
+        if type(opts.tree[name].formatter) ~= "function" then
+            error("fix.nvim: tree." .. name .. ".formatter must be a function", 2)
+        end
     end
 
     local route = opts.annotate.title.route
@@ -289,6 +326,15 @@ local group_highlight_palettes = {
     },
 }
 
+local tree_highlight_links = {
+    FixTreeIcon = "Special",
+    FixTreeName = "Identifier",
+    FixTreeValue = "String",
+    FixTreeMeta = "Comment",
+    FixTreeOperator = "Operator",
+    FixTreeGroup = "Type",
+}
+
 ---@param spec table
 ---@return number|nil
 local function highlight_fg(spec)
@@ -325,6 +371,10 @@ local function is_default_highlight(current, palettes)
 end
 
 local function register_highlights()
+    for group, link in pairs(tree_highlight_links) do
+        vim.api.nvim_set_hl(0, group, { default = true, link = link })
+    end
+
     local route_highlights = route_highlight_palettes[vim.o.background] or route_highlight_palettes.dark
     for group, spec in pairs(route_highlights) do
         local current = vim.api.nvim_get_hl(0, { name = group, link = false })
@@ -440,6 +490,7 @@ function M.setup(opts)
     register_autocmds()
 
     if is_resetup then
+        local dictionaries_invalidated = false
         if
             prev_opts.fallback_version == M.opts.fallback_version
             and vim.deep_equal(prev_opts.dictionaries, M.opts.dictionaries)
@@ -448,8 +499,12 @@ function M.setup(opts)
             Cache.drop_render()
         else
             Cache.clear()
+            dictionaries_invalidated = true
         end
         Render.rerender_all()
+        if dictionaries_invalidated then
+            refresh_tree()
+        end
     end
 end
 
@@ -502,6 +557,34 @@ function M.annotate_toggle(scope)
     Render.rerender(buf)
 end
 
+local online_versions = {
+    [Consts.FixVersion.FIX_2_7] = "2.7",
+    [Consts.FixVersion.FIX_3_0] = "3.0",
+    [Consts.FixVersion.FIX_4_0] = "4.0",
+    [Consts.FixVersion.FIX_4_1] = "4.1",
+    [Consts.FixVersion.FIX_4_2] = "4.2",
+    [Consts.FixVersion.FIX_4_3] = "4.3",
+    [Consts.FixVersion.FIX_4_4] = "4.4",
+    [Consts.FixVersion.FIX_5_0] = "5.0",
+    ["FIX.5.0"] = "5.0",
+    ["FIX.5.0SP1"] = "5.0",
+    ["FIX.5.0SP2"] = "5.0",
+}
+
+---@param version string
+---@param tag number
+---@return boolean opened
+function M.open_tag_online(version, tag)
+    local online_version = online_versions[version]
+    if not online_version or type(tag) ~= "number" then
+        return false
+    end
+
+    -- TODO: support custom URLs
+    vim.ui.open(string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", online_version, tag))
+    return true
+end
+
 function M.browse_tag_online()
     local buf = vim.api.nvim_get_current_buf()
     if vim.bo[buf].filetype ~= "fix" then
@@ -511,25 +594,7 @@ function M.browse_tag_online()
     if message == nil or field == nil then
         return
     end
-
-    local versions = {
-        [Consts.FixVersion.FIX_2_7] = "2.7",
-        [Consts.FixVersion.FIX_3_0] = "3.0",
-        [Consts.FixVersion.FIX_4_0] = "4.0",
-        [Consts.FixVersion.FIX_4_1] = "4.1",
-        [Consts.FixVersion.FIX_4_2] = "4.2",
-        [Consts.FixVersion.FIX_4_3] = "4.3",
-        [Consts.FixVersion.FIX_4_4] = "4.4",
-        [Consts.FixVersion.FIX_5_0] = "5.0",
-        ["FIX.5.0"] = "5.0",
-        ["FIX.5.0SP1"] = "5.0",
-        ["FIX.5.0SP2"] = "5.0",
-    }
-
-    -- TODO: support custom URLs
-    vim.ui.open(
-        string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", versions[message.version], field.tag)
-    )
+    M.open_tag_online(message.version, field.tag)
 end
 
 --- Drop all cached annotation data for the current file and re-render.
@@ -541,6 +606,7 @@ function M.cache_clear()
     Persist.delete(buf)
     Cache.clear()
     Render.purge(buf)
+    refresh_tree()
 end
 
 ---@param path string
@@ -548,6 +614,7 @@ function M.use_dictionary(path)
     local source = Dictionary.register(path)
     Cache.clear()
     Render.rerender_all()
+    refresh_tree()
     vim.notify(
         string.format("fix.nvim: using custom FIX dictionary %s from %s", source.version, source.path),
         vim.log.levels.INFO

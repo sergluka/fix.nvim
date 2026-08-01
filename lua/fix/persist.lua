@@ -4,7 +4,8 @@ local Log = require("fix.log")
 
 local M = {}
 
-local FORMAT_VERSION = 2
+-- 3: group instances carry `count_index`.
+local FORMAT_VERSION = 3
 
 -- Set on the first filesystem failure; persistence stays off for the session.
 M._disabled = false

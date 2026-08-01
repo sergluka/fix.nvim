@@ -91,6 +91,21 @@ local function node_to_semantic_field(buf, field_node, index)
     })
 end
 
+---@param buf number
+---@param message_node TSNode
+---@return Field[]
+local function fields_from_node(buf, message_node)
+    local fields = {}
+    local index = 1
+    for field_node in message_node:iter_children() do
+        if field_node:type() == "field" then
+            fields[#fields + 1] = node_to_semantic_field(buf, field_node, index)
+            index = index + 1
+        end
+    end
+    return fields
+end
+
 ---@param semantic FixSemantic
 local function decode(semantic)
     local dict = Dictionary.load(semantic.version)
@@ -144,6 +159,7 @@ local function annotate_group_field(field, stack)
             depth = depth,
             index = entry.index,
             name = entry.name,
+            count_index = entry.count_index,
         }
     end
     parts[#parts + 1] = field.tag_text or tostring(field.tag)
@@ -196,7 +212,7 @@ annotate_repeating_group = function(fields, count_index, group, parent_stack)
             break
         end
         local stack = vim.deepcopy(parent_stack)
-        stack[#stack + 1] = { name = group.name, index = entry_index }
+        stack[#stack + 1] = { name = group.name, index = entry_index, count_index = count_index }
         local next_index, consumed = annotate_group_entry(fields, index, group, stack)
         if not consumed or next_index == index then
             break
@@ -221,26 +237,24 @@ annotate_groups = function(fields, groups)
     end
 end
 
+---@param fields Field[]
+---@return string
+local function resolve_version(fields)
+    local version = get_version(fields)
+    if version then
+        return version
+    end
+    version = fallback_version()
+    vim.notify_once("Cannot get FIX version, fallback to " .. version, vim.log.levels.WARN)
+    return version
+end
+
 ---@param buf number
 ---@param message_node TSNode
 ---@return FixSemantic
 local function semantic_from_node(buf, message_node)
-    local fields = {}
-    local index = 1
-    for field_node in message_node:iter_children() do
-        if field_node:type() == "field" then
-            fields[#fields + 1] = node_to_semantic_field(buf, field_node, index)
-            index = index + 1
-        end
-    end
-
-    local version = get_version(fields)
-    if not version then
-        version = fallback_version()
-        vim.notify_once("Cannot get FIX version, fallback to " .. version, vim.log.levels.WARN)
-    end
-
-    local semantic = { version = version, fields = fields }
+    local fields = fields_from_node(buf, message_node)
+    local semantic = { version = resolve_version(fields), fields = fields }
     decode(semantic)
     return semantic
 end
@@ -264,13 +278,30 @@ end
 
 ---@param semantic FixSemantic
 ---@param lineno number
+---@param lazy_decode? boolean Decode on field access; for semantics that were not decoded up front.
 ---@return Message
-function M.message_from_semantic(semantic, lineno)
+function M.message_from_semantic(semantic, lineno, lazy_decode)
     local fields = {}
+    local list = lazy_decode and {} or nil
     for _, sf in ipairs(semantic.fields) do
-        insert_field(fields, Field.copy(sf))
+        local copy = Field.copy(sf)
+        if list then
+            list[#list + 1] = copy
+        end
+        insert_field(fields, copy)
     end
-    return Message.new(semantic.version, lineno, fields)
+
+    local decode_field
+    if list then
+        local dict = Dictionary.load(semantic.version)
+        if dict then
+            local ctx = { version = semantic.version, fields = list, dictionary = dict }
+            decode_field = function(field)
+                dict:decode(field, ctx)
+            end
+        end
+    end
+    return Message.new(semantic.version, lineno, fields, decode_field)
 end
 
 ---@param buf number
@@ -294,6 +325,37 @@ local function message_node_at(buf, lnum, line_text)
         node = node:parent()
     end
     return node, true
+end
+
+--- Build the cheap, always-visible summary message for a line. On a cold
+--- cache its fields are decoded only when the summary formatter accesses
+--- them; repeating groups are constructed when the message node is expanded.
+---@param buf number
+---@param lnum number 0-based
+---@param line_text string|nil
+---@param key string|nil
+---@return Message|nil message, string key, boolean authoritative
+function M.summary_line(buf, lnum, line_text, key)
+    line_text = line_text or vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1]
+    if line_text == nil then
+        return nil, "", true
+    end
+    key = key or Cache.key(line_text)
+
+    local semantic = Cache.get_semantic(key)
+    if semantic == false then
+        return nil, key, true
+    elseif semantic ~= nil then
+        return M.message_from_semantic(semantic, lnum), key, true
+    end
+
+    local node, covered = message_node_at(buf, lnum, line_text)
+    if not node then
+        return nil, key, covered
+    end
+
+    local fields = fields_from_node(buf, node)
+    return M.message_from_semantic({ version = resolve_version(fields), fields = fields }, lnum, true), key, true
 end
 
 --- Build (or fetch from cache) the message on a line.
@@ -346,15 +408,12 @@ function M.iter_messages(buf, on_message)
     end
 end
 
---- Resolve the field at the cursor by column containment — no buffer-tree
---- access, so it stays correct on bigfile buffers (where the tree may be
---- unparsed at the cursor) and never throws on an unexpected node shape.
+--- Resolve the field at a buffer position by column containment.
 ---@param buf number
+---@param lnum number 0-based
+---@param col number 0-based byte column
 ---@return Message|nil, Field|nil
-function M.get_field_under_cursor(buf)
-    local pos = vim.api.nvim_win_get_cursor(0)
-    local lnum, col = pos[1] - 1, pos[2]
-
+function M.get_field_at(buf, lnum, col)
     local message = M.build_line(buf, lnum)
     if message == nil then
         return nil, nil
@@ -366,6 +425,16 @@ function M.get_field_under_cursor(buf)
         end
     end
     return nil, nil
+end
+
+--- Resolve the field at the cursor. This uses column containment rather than
+--- buffer-tree lookup, so it remains correct on partially parsed big files.
+---@param buf number
+---@return Message|nil, Field|nil
+function M.get_field_under_cursor(buf)
+    local pos = vim.api.nvim_win_get_cursor(0)
+    local lnum, col = pos[1] - 1, pos[2]
+    return M.get_field_at(buf, lnum, col)
 end
 
 return M

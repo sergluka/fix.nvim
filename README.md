@@ -20,7 +20,7 @@ protocol messages.
 
 Before using this plugin, consider the following known Neovim limitations:
 
-- On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`).
+- On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`). You can still explore fields with the [FIX message tree](#fix-message-tree) or `:FIX picker`.
 - Virtual lines above the first buffer line are not displayed ([neovim/neovim#16166](https://github.com/neovim/neovim/issues/16166)). Workaround: avoid `annotate.title.position = "above"`.
 - On very large files, Neovim's tree-sitter highlighting can freeze the UI when jumping into unparsed regions. Disable highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your distribution's big-file protection handle it.
 
@@ -40,6 +40,8 @@ Before using this plugin, consider the following known Neovim limitations:
 - `mega.cmdparse`
 - `mega.logging`
 - Optional: `snacks.nvim` for `:FIX picker`
+- Optional: [neo-tree.nvim](https://github.com/nvim-neo-tree/neo-tree.nvim) for
+  `:FIX tree`
 - Development only: Podman >= 5.x for integration tests
 
 ## Installation
@@ -55,6 +57,7 @@ Before using this plugin, consider the following known Neovim limitations:
     "ColinKennedy/mega.cmdparse",
     "ColinKennedy/mega.logging",
     "folke/snacks.nvim", -- optional; omit if you do not use :FIX picker
+    "nvim-neo-tree/neo-tree.nvim", -- optional; configure the source below
   },
   build = { "rockspec", ":TSUpdate fix" },
   opts = {},
@@ -68,6 +71,7 @@ Before using this plugin, consider the following known Neovim limitations:
 | `:FIX --help` | | Show command help |
 | `:FIX annotations [all|tag|value|title|message|group]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
+| `:FIX tree` | `require("fix.neo_tree").open()` | Open the FIX message tree |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
 | `:FIX dictionary <PATH>` | `require("fix").use_dictionary(path)` | Use a custom FIX dictionary XML file or repository directory |
 | `:FIX yank [--reg=<REGISTER>]` | `require("fix").yank(reg)` | Smart yank: current/selected fields for characterwise targets, selected messages for linewise targets |
@@ -75,6 +79,40 @@ Before using this plugin, consider the following known Neovim limitations:
 
 `FIX yank` accepts visual ranges and Vim operator targets. Characterwise
 targets yank selected annotated fields; linewise targets yank selected messages.
+
+## FIX Message Tree
+
+The tree is an external neo-tree source. Register it in your neo-tree setup;
+fix.nvim does not call `neo-tree.setup()` for you:
+
+```lua
+require("neo-tree").setup({
+  sources = { "filesystem", "buffers", "git_status", "fix.neo_tree" },
+})
+```
+
+Use `:FIX tree` or `:Neotree fix` from a FIX buffer. Message summaries in the
+current FIX-buffer viewport are added first. The rest of the buffer is scanned
+in `render.lines_per_batch` background batches; scrolling immediately adds any
+missing summaries in the new viewport without restarting that scan. A status
+row at the bottom shows the buffer name, scan percentage, and message count
+until the scan finishes.
+
+Summary nodes stay lightweight: their fields and repeating groups are added
+only when the message is first expanded. Repeating-group instances start
+collapsed. Opening the tree expands only the path to the field under the
+cursor. Moving across fields in the FIX buffer selects the matching tree node
+without moving focus out of the buffer.
+
+The source keeps neo-tree's familiar tree keys: `<CR>` opens or toggles a node,
+`<Space>` toggles it, `C` collapses the current branch, and `z` collapses all
+loaded branches. `y` yanks the displayed label to the active Vim register;
+`gx` opens online tag documentation for a field or repeating-group count tag.
+No action parses additional messages except expanding an unloaded summary. The
+source follows the last active FIX buffer and inherits neo-tree's global window
+position.
+
+## Custom Dictionaries
 
 Custom dictionaries can be configured in `setup()` or registered at runtime
 with `FIX dictionary`. Selection is based on tag `8` (`BeginString`): a custom
@@ -204,6 +242,24 @@ change; omitted fields fall back to the defaults below.
     lines_per_batch = 500,
     viewport_margin = 50,
   },
+
+  tree = {
+    summary = {
+      formatter = function(message)
+        return require("fix.formatters.tree.summary").default(message)
+      end,
+    },
+    field = {
+      formatter = function(field)
+        return require("fix.formatters.tree.field").default(field)
+      end,
+    },
+    group = {
+      formatter = function(group, field)
+        return require("fix.formatters.tree.group").default(group, field)
+      end,
+    },
+  },
 }
 ```
 
@@ -254,6 +310,16 @@ Custom formatters should be pure functions of the provided message or field:
 formatter output is cached by line hash and reused across identical lines and
 buffers, so formatters that read `message.lineno`, buffer state, or other
 external state can produce stale annotations.
+
+Tree formatters may return one `{ text, highlight }` tuple or a list of those
+tuples, such as `{ { "Symbol", "Identifier" }, { " = BTCUSD", "String" } }`.
+The single-tuple form remains supported. Like the title formatter, the summary
+formatter receives a `Message` and can access tags with `message:field(tag)`.
+The field formatter receives a `Field`. The group formatter receives `(group,
+field)`: a typed `FixTreeGroup` and its repeating-group count field, such as
+`NoMDEntries (268)`. Setting a formatter replaces the default for that node
+type. The built-in formatters put decoded names and values first and show raw
+tags and enum values as muted metadata.
 
 Title formatters receive the parsed message and can reuse route styling without
 depending on the default `sender=>target` title text:
@@ -329,9 +395,17 @@ fix.nvim defines the following highlight groups. Defaults follow
 | `FixGroupDepth2B` | `#332943` | `#f0e8ff` | Group palette slot 4 |
 | `FixGroupDepth3A` | `#20383c` | `#e2f6f8` | Group palette slot 5 |
 | `FixGroupDepth3B` | `#422630` | `#ffe7ee` | Group palette slot 6 |
+| `FixTreeIcon` | `Special` | `Special` | FIX tree node icons |
+| `FixTreeName` | `Identifier` | `Identifier` | Decoded message and field names |
+| `FixTreeValue` | `String` | `String` | Decoded field values |
+| `FixTreeMeta` | `Comment` | `Comment` | Raw tags, values, and scan status |
+| `FixTreeOperator` | `Operator` | `Operator` | Tree separators and operators |
+| `FixTreeGroup` | `Type` | `Type` | Repeating-group names |
 
 Route groups use bold foreground colors; repeating-group groups use background
 colors. Group colors advance by depth and entry, then wrap through the palette.
+Tree groups are default links to standard Neovim groups, so colorscheme or user
+definitions can override them normally.
 
 The plugin also reuses standard Neovim groups: `Comment` for default tag and
 value annotations, `Operator` in the picker, and `IncSearch` for yank feedback.

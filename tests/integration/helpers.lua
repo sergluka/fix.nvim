@@ -12,6 +12,7 @@ local STUB_INSTALL = [[
 	_G._fix_test_notifications = {}
 	_G._fix_test_ui_opens = {}
 	_G._fix_test_picker_opens = 0
+	_G._fix_test_tree_opens = 0
 
 	vim.notify = function(msg, level)
 		table.insert(_G._fix_test_notifications, { msg, level })
@@ -27,6 +28,11 @@ local STUB_INSTALL = [[
 			_G._fix_test_picker_opens = _G._fix_test_picker_opens + 1
 		end,
 	}
+	package.loaded["fix.neo_tree"] = {
+		open = function()
+			_G._fix_test_tree_opens = _G._fix_test_tree_opens + 1
+		end,
+	}
 ]]
 
 function M.new_nvim(opts)
@@ -38,6 +44,9 @@ function M.new_nvim(opts)
     nvim.lua(STUB_INSTALL)
     if opts.real_picker then
         nvim.lua([[package.loaded["fix.snacks"] = nil]])
+    end
+    if opts.real_tree then
+        nvim.lua([[package.loaded["fix.neo_tree"] = nil]])
     end
     return nvim
 end
@@ -129,6 +138,10 @@ end
 
 function M.get_picker_opens(nvim)
     return nvim.lua_get("_G._fix_test_picker_opens")
+end
+
+function M.get_tree_opens(nvim)
+    return nvim.lua_get("_G._fix_test_tree_opens")
 end
 
 -- Default tag/value formatters wrap text as "(Name)". Strip parens and

@@ -13,6 +13,9 @@ for _, name in ipairs({
     "mega.cmdparse",
     "mega.logging",
     "snacks.nvim",
+    "neo-tree.nvim",
+    "nui.nvim",
+    "plenary.nvim",
     "mini.nvim",
 }) do
     vim.opt.runtimepath:prepend("/opt/deps/" .. name)

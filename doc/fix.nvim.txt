@@ -32,6 +32,7 @@ REQUIREMENTS                                           *fix.nvim-requirements*
 - mega.cmdparse.
 - mega.logging.
 - snacks.nvim, optional, for |:FIX-picker|.
+- neo-tree.nvim, optional, for |:FIX-tree|.
 
 On very large files, Neovim's tree-sitter highlighting can freeze the UI when
 jumping into unparsed regions. That is independent of fix.nvim. Disable
@@ -56,6 +57,7 @@ Example for lazy.nvim:
         "ColinKennedy/mega.cmdparse",
         "ColinKennedy/mega.logging",
         "folke/snacks.nvim", -- optional
+        "nvim-neo-tree/neo-tree.nvim", -- optional
       },
       build = { "rockspec", ":TSUpdate fix" },
       opts = {},
@@ -101,6 +103,30 @@ The `:FIX` command exposes the user-facing plugin actions.
                                                           *:FIX-picker*
 `:FIX picker`
     Open the fields picker. Requires snacks.nvim.
+
+                                                            *:FIX-tree*
+`:FIX tree`
+    Open the FIX message tree. Requires neo-tree.nvim and source registration:
+>
+        require("neo-tree").setup({
+          sources = { "filesystem", "buffers", "git_status", "fix.neo_tree" },
+        })
+<
+    `:Neotree fix` opens the same source. Summaries in the current FIX-buffer
+    viewport are added first. The rest of the buffer is scanned in
+    `render.lines_per_batch` background batches; scrolling adds missing
+    summaries in the new viewport without restarting that scan. A bottom row
+    shows scan progress until all summaries have been added. Message fields and
+    repeating groups are added only when their message is expanded; repeating-
+    group instances start collapsed. Opening the tree expands only the path to
+    the field under the cursor.
+
+    `<CR>` opens or toggles a node, `<Space>` toggles it, `C` collapses the
+    current branch, and `z` collapses all loaded branches. `y` yanks the
+    displayed label to the active Vim register. `gx` opens online documentation
+    for a field or repeating-group count tag. Moving across fields in the FIX
+    buffer selects the matching node without stealing focus. The source follows
+    the last active FIX buffer and inherits neo-tree's global window position.
 
                                                           *:FIX-browse*
 `:FIX browse`
@@ -218,6 +244,24 @@ These are the defaults:
         lines_per_batch = 500,
         viewport_margin = 50,
       },
+
+      tree = {
+        summary = {
+          formatter = function(message)
+            return require("fix.formatters.tree.summary").default(message)
+          end,
+        },
+        field = {
+          formatter = function(field)
+            return require("fix.formatters.tree.field").default(field)
+          end,
+        },
+        group = {
+          formatter = function(group, field)
+            return require("fix.formatters.tree.group").default(group, field)
+          end,
+        },
+      },
     })
 <
 Omit a `formatter` field to use the built-in formatter. The wrapped
@@ -237,6 +281,29 @@ Field formatters return:
 >
     { text = "display text", highlight = "HighlightGroup" }
 <
+Tree summary, field, and group formatters may return one positional chunk:
+>
+    { "display text", "HighlightGroup" }
+<
+or a list of chunks:
+>
+    {
+      { "decoded name", "Identifier" },
+      { " = decoded value", "String" },
+    }
+<
+The single-chunk form remains supported. The built-in tree formatters show
+decoded names and values first, with raw tags and enum values as metadata.
+Like a title formatter, the summary formatter receives a `Message` and can use
+`message:field(tag)`. The field formatter receives a `Field`. The group
+formatter receives `(group, field)`: a typed `FixTreeGroup` and its repeating-
+group count field, such as `NoMDEntries (268)`. Setting a tree formatter fully
+replaces the default formatter for that node type.
+
+The built-in tree formatters use `FixTreeIcon`, `FixTreeName`, `FixTreeValue`,
+`FixTreeMeta`, `FixTreeOperator`, and `FixTreeGroup`. These are default-linked
+to `Special`, `Identifier`, `String`, `Comment`, `Operator`, and `Type`
+respectively, and may be overridden like normal highlight groups.
 Title formatters return:
 >
     { { { "display text", "HighlightGroup" } } }
@@ -496,5 +563,10 @@ LUA API                                                       *fix.nvim-api*
                                                         *fix.snacks.open()*
 `require("fix.snacks").open()`
     Open the optional snacks.nvim field picker.
+
+                                                      *fix.neo_tree.open()*
+`require("fix.neo_tree").open()`
+    Open the optional neo-tree FIX source. The source must be registered as
+    `fix.neo_tree` in neo-tree's `sources` list.
 
 vim:tw=78:ts=8:ft=help:norl:

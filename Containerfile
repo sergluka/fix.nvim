@@ -36,6 +36,9 @@ RUN set -eux; \
         "mega.cmdparse  https://github.com/ColinKennedy/mega.cmdparse      47ea5b1b23059fbb79a8e262002f32e7cd8aed90" \
         "mega.logging   https://github.com/ColinKennedy/mega.logging       194ad8c300186e73c3eb1ebeb3ede42eb219be3b" \
         "snacks.nvim    https://github.com/folke/snacks.nvim               0770753c88228f7f15449c6a5b242e3f7cd0d71c" \
+        "neo-tree.nvim  https://github.com/nvim-neo-tree/neo-tree.nvim     b01ee1769144c4491ea44bc329cb84040e9793be" \
+        "nui.nvim       https://github.com/MunifTanjim/nui.nvim            de740991c12411b663994b2860f1a4fd0937c130" \
+        "plenary.nvim   https://github.com/nvim-lua/plenary.nvim           74b06c6c75e4eeb3108ec01852001636d85a932b" \
         "mini.nvim      https://github.com/nvim-mini/mini.nvim             a405061478d8027b4e21214d897ce1eb33115792" \
     ; do \
         set -- $entry; name=$1; url=$2; sha=$3; \

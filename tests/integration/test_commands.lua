@@ -4,6 +4,11 @@ local MiniTest = require("mini.test")
 local T = H.new_test_set()
 local nvim = H.nvim
 
+T["FIX tree delegates to the optional neo-tree integration"] = function()
+    nvim().cmd("FIX tree")
+    MiniTest.expect.equality(H.get_tree_opens(nvim()), 1)
+end
+
 T["FIX annotations tag toggle"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     local before = #H.get_extmarks(nvim())
