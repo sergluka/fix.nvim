@@ -110,11 +110,11 @@ local default_settings = {
             },
         },
         tag = {
-            enabled = true,
+            enabled = false,
             formatter = TagFormatter.default,
         },
         value = {
-            enabled = true,
+            enabled = false,
             formatter = ValueFormatter.default,
         },
         title = {

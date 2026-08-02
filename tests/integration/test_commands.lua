@@ -13,7 +13,7 @@ T["FIX annotations tag toggle"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     local before = #H.get_extmarks(nvim())
     nvim().cmd("FIX annotations tag")
-    MiniTest.expect.equality(#H.get_extmarks(nvim()) < before, true)
+    MiniTest.expect.equality(#H.get_extmarks(nvim()) > before, true)
     nvim().cmd("FIX annotations tag")
     MiniTest.expect.equality(#H.get_extmarks(nvim()), before)
 end
@@ -22,7 +22,7 @@ T["FIX annotations value toggle"] = function()
     H.load_fixture(nvim(), "4.4.fix")
     local before = #H.get_extmarks(nvim())
     nvim().cmd("FIX annotations value")
-    MiniTest.expect.equality(#H.get_extmarks(nvim()) < before, true)
+    MiniTest.expect.equality(#H.get_extmarks(nvim()) > before, true)
     nvim().cmd("FIX annotations value")
     MiniTest.expect.equality(#H.get_extmarks(nvim()), before)
 end
@@ -341,6 +341,7 @@ T["FIX cache clear is registered"] = function()
 end
 
 T["FIX dictionary uses Binance QuickFIX dictionary"] = function()
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
@@ -362,6 +363,7 @@ T["FIX dictionary uses Binance QuickFIX dictionary"] = function()
 end
 
 T["FIX dictionary uses Coinbase QuickFIX dictionary"] = function()
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
@@ -392,6 +394,7 @@ T["setup dictionaries uses explicit version key"] = function()
             },
         })
     ]])
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
@@ -414,6 +417,7 @@ T["setup dictionaries list shorthand accepts unique inferred versions"] = functi
             },
         })
     ]])
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
@@ -453,6 +457,7 @@ T["setup dictionaries explicit key overrides inferred XML version"] = function()
             },
         })
     ]])
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
@@ -478,6 +483,7 @@ T["setup dictionaries can satisfy fallback_version"] = function()
             },
         })
     ]])
+    H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {

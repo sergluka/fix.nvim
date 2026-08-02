@@ -192,13 +192,13 @@ These are the defaults:
           },
         },
         tag = {
-          enabled = true,
+          enabled = false,
           formatter = function(field)
             return require("fix.formatters.tag").default(field)
           end,
         },
         value = {
-          enabled = true,
+          enabled = false,
           formatter = function(field)
             return require("fix.formatters.value").default(field)
           end,

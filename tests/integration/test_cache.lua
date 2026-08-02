@@ -83,7 +83,7 @@ local COUNTING_SETUP = [[
     _G._tag_calls = 0
     local default = require("fix.formatters.tag").default
     require("fix").setup({
-        annotate = { tag = { formatter = function(field)
+        annotate = { tag = { enabled = true, formatter = function(field)
             _G._tag_calls = _G._tag_calls + 1
             return default(field)
         end } },
@@ -152,6 +152,7 @@ end
 
 T["behavior"]["toggle off->on with unchanged content redraws (generation)"] = function()
     local nvim = Helpers.nvim()
+    Helpers.enable_inline_annotations(nvim)
     Helpers.load_fixture(nvim, "4.4.fix")
 
     local before = Helpers.inline_label_count(nvim, "BeginString")

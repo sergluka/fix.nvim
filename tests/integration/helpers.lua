@@ -48,7 +48,30 @@ function M.new_nvim(opts)
     if opts.real_tree then
         nvim.lua([[package.loaded["fix.neo_tree"] = nil]])
     end
+    if opts.inline_annotations then
+        M.enable_inline_annotations(nvim)
+    end
     return nvim
+end
+
+--- Turn tag/value annotations on for the rest of this child's life. The wrapper
+--- keeps them on across any later `fix.setup()` a test performs, which would
+--- otherwise restore the off-by-default flags.
+function M.enable_inline_annotations(nvim)
+    nvim.lua([[
+        local fix = require("fix")
+        local setup = fix.setup
+        fix.setup = function(opts)
+            return setup(vim.tbl_deep_extend("force", opts or {}, {
+                annotate = { tag = { enabled = true }, value = { enabled = true } },
+            }))
+        end
+        for _, opts in ipairs({ fix.opts, fix.opts_initial }) do
+            opts.annotate.tag.enabled = true
+            opts.annotate.value.enabled = true
+        end
+        require("fix.render").rerender_all()
+    ]])
 end
 
 --- Returns a MiniTest set whose pre_case / post_case lifecycle spawns and

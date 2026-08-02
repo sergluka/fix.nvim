@@ -1,7 +1,7 @@
 local H = require("tests.integration.helpers")
 local MiniTest = require("mini.test")
 
-local T = H.new_test_set()
+local T = H.new_test_set({ inline_annotations = true })
 local nvim = H.nvim
 
 local function set_fix_lines(lines)
