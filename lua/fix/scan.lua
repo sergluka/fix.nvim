@@ -12,6 +12,15 @@ local function opts()
     return require("fix").opts
 end
 
+--- Stop and dispose a libuv timer; nil-safe. Shared by every Scan consumer.
+---@param timer uv.uv_timer_t|nil
+function M.close_timer(timer)
+    if timer and not timer:is_closing() then
+        timer:stop()
+        timer:close()
+    end
+end
+
 ---@param buf number
 ---@return { [1]: number, [2]: number }[] 0-based [first, last-exclusive) ranges
 function M.viewport_ranges(buf)
@@ -169,10 +178,7 @@ function Walk:rewind(lnum)
 end
 
 function Walk:cancel()
-    if self._timer and not self._timer:is_closing() then
-        self._timer:stop()
-        self._timer:close()
-    end
+    M.close_timer(self._timer)
     self._timer = nil
 end
 

@@ -5,10 +5,10 @@ local xml2lua = require("xml2lua")
 ---@alias GroupDefsByTag table<integer, GroupDef>
 
 ---@class MessageDef
----@field type FixMessageType
+---@field type string           MsgType value, e.g. "D"
 ---@field name string
----@field category string
----@field description string
+---@field category? string
+---@field description? string
 
 ---@class FieldDef
 ---@field tag number
@@ -43,6 +43,7 @@ local xml2lua = require("xml2lua")
 ---@field private _enums    table<string, EnumDef>
 ---@field private _tags     table<integer, FixTagDecoder>
 ---@field private _groups   table<string, GroupDefsByTag>
+---@field private _messages table<string, MessageDef>
 
 ---@class DictionarySource
 ---@field key string
@@ -71,7 +72,8 @@ local xml2lua = require("xml2lua")
 ---@field private _cache? table<string, Dictionary>
 ---@field resolve_version fun(version: string): string
 ---@field has_version fun(version: string, custom?: DictionaryRegistry): boolean
----@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>, tags?: table<integer, FixTagDecoder>): Dictionary
+---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>, tags?: table<integer, FixTagDecoder>,
+---  groups?: table<string, GroupDefsByTag>, messages?: table<string, MessageDef>): Dictionary
 ---@field load fun(version: string): Dictionary?
 ---@field register fun(config: DictionaryConfig): DictionarySource
 ---@field prepare fun(dictionaries?: table): DictionaryRegistry
@@ -414,7 +416,7 @@ end
 local function load_repository_groups(dir, fields)
     local messages_path, msg_contents_path, components_path = repository_structure_paths(dir)
     if not messages_path then
-        return {}
+        return {}, {}
     end
 
     local messages_xml = parse_file(messages_path)
@@ -489,6 +491,7 @@ local function load_repository_groups(dir, fields)
     end
 
     local groups = {}
+    local messages = {}
     for _, message in ipairs(as_list(messages_xml.Messages.Message)) do
         local msg_type = text(message.MsgType)
         local component_id = tonumber(text(message.ComponentID))
@@ -496,9 +499,18 @@ local function load_repository_groups(dir, fields)
             local children = component_children(component_id, {}, 0)
             groups[msg_type] = group_defs_by_count(grouped_by_indent(children, 1, -1, fields))
         end
+        local name = text(message.Name)
+        if msg_type and name then
+            messages[msg_type] = {
+                type = msg_type,
+                name = name,
+                category = text(message.CategoryID),
+                description = text(message.Description),
+            }
+        end
     end
 
-    return groups
+    return groups, messages
 end
 
 local function load_quickfix_group(group, by_name)
@@ -560,6 +572,7 @@ local function load_quickfix(path)
     end
 
     local groups = {}
+    local messages = {}
     local by_name = field_by_name(fields)
     local messages_root = root.messages or root.Messages
     if messages_root then
@@ -571,6 +584,8 @@ local function load_quickfix(path)
                     name = name,
                     description = name,
                 }
+                -- QuickFIX DTD carries no message descriptions; name-only defs.
+                messages[msgtype] = { type = msgtype, name = name }
             end
             if msgtype then
                 local children = {}
@@ -585,7 +600,7 @@ local function load_quickfix(path)
         end
     end
 
-    return fields, enums, groups
+    return fields, enums, groups, messages
 end
 
 ---@param source DictionarySource
@@ -595,15 +610,17 @@ local function load_source(source)
     end
 
     local fields = load_fields(source.path, "Fields.xml")
-    return fields, load_enums(source.path, "Enums.xml"), load_repository_groups(source.path, fields)
+    local groups, messages = load_repository_groups(source.path, fields)
+    return fields, load_enums(source.path, "Enums.xml"), groups, messages
 end
 
-function M.new(fields, enums, tags, groups)
+function M.new(fields, enums, tags, groups, messages)
     local self = {
         _fields = fields or {},
         _enums = enums or {},
         _tags = tags or {},
         _groups = groups or {},
+        _messages = messages or {},
     }
     setmetatable(self, { __index = M }) -- __index is set here
     return self
@@ -629,8 +646,8 @@ function M.load(version)
 
     vim.notify("fix.nvim: Loading FIX dictionary for version " .. source.version, vim.log.levels.DEBUG)
 
-    local fields, enums, groups = load_source(source)
-    local dict = M.new(fields, enums, source.tags, groups)
+    local fields, enums, groups, messages = load_source(source)
+    local dict = M.new(fields, enums, source.tags, groups, messages)
     M._cache[source.key] = dict
 
     return dict
@@ -1014,14 +1031,25 @@ function M:field(tag)
 end
 
 ---@param tag integer
----@param value string
+---@param value string|nil
+---@return EnumDef|nil
 function M:enum(tag, value)
+    if value == nil then
+        return nil
+    end
     return self._enums[tag .. ":" .. value]
 end
 
 ---@param value string
 function M:message(value)
     return self:enum(35, value)
+end
+
+--- Message metadata from Messages.xml; quickfix dictionaries carry name only.
+---@param msg_type string
+---@return MessageDef|nil
+function M:message_def(msg_type)
+    return self._messages[msg_type]
 end
 
 ---@param msg_type string

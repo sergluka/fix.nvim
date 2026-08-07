@@ -7,6 +7,7 @@ local Route = require("fix.route")
 --- @field _fields { [number]: Field }
 --- @field private _decode_field? fun(field: Field)
 --- @field private _decoded_fields table<Field, boolean>
+--- @field private _list_fields? Field[]
 local M = {}
 
 ---@param version string
@@ -71,8 +72,12 @@ function M:route_highlight()
     return Route.highlight(self)
 end
 
+--- Sorted once per message; callers treat the returned list as read-only.
 --- @return Field[]
 function M:list_fields()
+    if self._list_fields then
+        return self._list_fields
+    end
     local fields = {} ---@type Field[]
     for _, field in pairs(self:fields()) do
         table.insert(fields, field)
@@ -80,6 +85,7 @@ function M:list_fields()
     table.sort(fields, function(lhs, rhs)
         return lhs.index < rhs.index
     end)
+    self._list_fields = fields
     return fields
 end
 

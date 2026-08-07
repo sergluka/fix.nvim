@@ -1,5 +1,4 @@
 -- TODO: competition?
--- TODO: validation?
 -- TODO: highlight values based on Type
 
 ---@alias FixTreeFormatterChunk { [1]: string, [2]: string? }
@@ -45,6 +44,14 @@
 ---@field render.debounce_ms? number
 ---@field render.lines_per_batch? number
 ---@field render.viewport_margin? number
+---@field lsp? table
+---@field lsp.enabled? boolean
+---@field lsp.validate? table
+---@field lsp.validate.enabled? boolean
+---@field lsp.validate.debounce_ms? number
+---@field lsp.validate.rules? table<string, boolean|FixRuleSpec>
+---@field lsp.hover? table
+---@field lsp.hover.enabled? boolean
 ---@field tree? table
 ---@field tree.summary? table
 ---@field tree.summary.formatter? fun(message: Message): FixTreeFormatterResult
@@ -72,6 +79,8 @@ local TitleFormatter = require("fix.formatters.title")
 local TreeFieldFormatter = require("fix.formatters.tree.field")
 local TreeGroupFormatter = require("fix.formatters.tree.group")
 local TreeSummaryFormatter = require("fix.formatters.tree.summary")
+local Validate = require("fix.validate")
+local ValidateRules = require("fix.validate.rules")
 local ValueFormatter = require("fix.formatters.value")
 local Yank = require("fix.yank")
 
@@ -152,6 +161,21 @@ local default_settings = {
         lines_per_batch = 500,
         viewport_margin = 50,
     },
+    lsp = {
+        enabled = true,
+        validate = {
+            enabled = true,
+            debounce_ms = 200,
+            rules = {
+                begin_string = { enabled = true },
+                body_length = { enabled = true },
+                checksum = { enabled = true },
+            },
+        },
+        hover = {
+            enabled = true,
+        },
+    },
     tree = {
         summary = {
             formatter = TreeSummaryFormatter.default,
@@ -221,6 +245,34 @@ local function validate_opts(opts, dictionaries)
     for _, name in ipairs({ "summary", "field", "group" }) do
         if type(opts.tree[name].formatter) ~= "function" then
             error("fix.nvim: tree." .. name .. ".formatter must be a function", 2)
+        end
+    end
+
+    local lsp = opts.lsp
+    if type(lsp.enabled) ~= "boolean" then
+        error("fix.nvim: lsp.enabled must be a boolean", 2)
+    end
+    local validate = lsp.validate
+    if type(validate) ~= "table" or type(validate.enabled) ~= "boolean" then
+        error("fix.nvim: lsp.validate.enabled must be a boolean", 2)
+    end
+    if type(lsp.hover) ~= "table" or type(lsp.hover.enabled) ~= "boolean" then
+        error("fix.nvim: lsp.hover.enabled must be a boolean", 2)
+    end
+    local debounce = validate.debounce_ms
+    if type(debounce) ~= "number" or debounce < 0 or debounce ~= debounce or debounce == math.huge then
+        error("fix.nvim: lsp.validate.debounce_ms must be a non-negative number", 2)
+    end
+    if type(validate.rules) ~= "table" then
+        error("fix.nvim: lsp.validate.rules must be a table of rule id to settings", 2)
+    end
+    for id, entry in pairs(validate.rules) do
+        if type(id) ~= "string" then
+            error("fix.nvim: lsp.validate.rules must be keyed by rule id", 2)
+        end
+        local problem = ValidateRules.problem(id, entry)
+        if problem then
+            error("fix.nvim: " .. problem, 2)
         end
     end
 
@@ -415,6 +467,7 @@ local function register_autocmds()
         pattern = "fix",
         callback = function(args)
             Render.attach(args.buf)
+            Validate.attach(args.buf)
         end,
     })
 
@@ -423,6 +476,7 @@ local function register_autocmds()
         callback = function(args)
             if vim.bo[args.buf].filetype == "fix" then
                 Render.attach(args.buf)
+                Validate.attach(args.buf)
             end
         end,
     })
@@ -484,12 +538,14 @@ function M.setup(opts)
     M.opts = next_opts
     M.opts_initial = vim.deepcopy(M.opts)
     local dictionaries_changed = Dictionary.apply(dictionaries)
+    ValidateRules.reset(M.opts.lsp.validate.rules)
 
     register_highlights()
     register_filetype()
     register_autocmds()
 
     if is_resetup then
+        Validate.reattach_all()
         local dictionaries_invalidated = false
         if
             prev_opts.fallback_version == M.opts.fallback_version
@@ -557,6 +613,14 @@ function M.annotate_toggle(scope)
     Render.rerender(buf)
 end
 
+--- Turn the whole LSP subsystem (diagnostics, fixes, hover) on or off.
+function M.lsp_toggle()
+    local enabled = not M.opts.lsp.enabled
+    M.opts.lsp.enabled = enabled
+    Validate.set_enabled(enabled)
+    vim.notify("fix.nvim: LSP features " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
+end
+
 local online_versions = {
     [Consts.FixVersion.FIX_2_7] = "2.7",
     [Consts.FixVersion.FIX_3_0] = "3.0",
@@ -571,17 +635,27 @@ local online_versions = {
     ["FIX.5.0SP2"] = "5.0",
 }
 
+-- TODO: support custom URLs
+---@param version string
+---@param tag number
+---@return string|nil url nil for an unknown version
+function M.tag_url(version, tag)
+    local online_version = online_versions[version]
+    if not online_version or type(tag) ~= "number" then
+        return nil
+    end
+    return string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", online_version, tag)
+end
+
 ---@param version string
 ---@param tag number
 ---@return boolean opened
 function M.open_tag_online(version, tag)
-    local online_version = online_versions[version]
-    if not online_version or type(tag) ~= "number" then
+    local url = M.tag_url(version, tag)
+    if not url then
         return false
     end
-
-    -- TODO: support custom URLs
-    vim.ui.open(string.format("https://www.onixs.biz/fix-dictionary/%s/tagNum_%d.html", online_version, tag))
+    vim.ui.open(url)
     return true
 end
 

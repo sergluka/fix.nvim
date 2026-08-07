@@ -77,7 +77,8 @@ fix.nvim registers the `fix` filetype for these defaults:
 
 When a buffer has `filetype=fix`, fix.nvim attaches automatically and annotates
 the visible viewport first. Off-screen lines warm the parse/decode cache in
-background batches.
+background batches. Message validation runs alongside it and reports problems
+as diagnostics; see |fix.nvim-validation|.
 
 No keymaps are set by default. Use |fix.nvim-keymaps| for suggested mappings.
 
@@ -144,6 +145,11 @@ The `:FIX` command exposes the user-facing plugin actions.
     Characterwise visual ranges yank selected annotated fields. Linewise ranges
     yank selected messages. Without a range, the command yanks the current field
     or message according to the yank helper behavior.
+
+                                                  *:FIX-lsp-toggle*
+`:FIX lsp toggle`
+    Turn the LSP features — diagnostics, fixes and dictionary hover — on or
+    off for every FIX buffer. See |fix.nvim-validation|.
 
                                                      *:FIX-cache-clear*
 `:FIX cache clear`
@@ -243,6 +249,22 @@ These are the defaults:
         debounce_ms = 80,
         lines_per_batch = 500,
         viewport_margin = 50,
+      },
+
+      lsp = {
+        enabled = true,
+        validate = {
+          enabled = true,
+          debounce_ms = 200,
+          rules = {
+            begin_string = { enabled = true },
+            body_length = { enabled = true },
+            checksum = { enabled = true },
+          },
+        },
+        hover = {
+          enabled = true,
+        },
       },
 
       tree = {
@@ -345,6 +367,118 @@ annotations and the title at the front.
 
 `annotate.message` is kept as a deprecated alias for `annotate.title`. Using it
 emits a warning; if both are set, `annotate.title` wins.
+
+                                                   *fix.nvim-validation*
+Validation runs as a language server inside Neovim, started on demand; nothing
+extra needs installing. Problems appear as ordinary diagnostics, so signs,
+`]d`/`[d` and |vim.diagnostic.setqflist()| work as usual, and repairs appear as
+code actions applied by Neovim's LSP client, so undo behaves normally.
+
+Three rules ship built in. `begin_string` reports a line that parses as
+`tag=value` pairs but carries no BeginString — a dumped repeating group, a
+truncated line — as "Not a FIX message". `body_length` checks BodyLength (tag
+9) and `checksum` checks CheckSum (tag 10); both also report the field missing
+entirely. The latter two are linked, because correcting BodyLength changes the
+bytes CheckSum covers: a message wrong in both places offers one "Fix
+BodyLength and CheckSum" action. Field separators are normalised, so `|`, `^`
+and SOH logs validate the same.
+
+Rules run in tiers, lowest first, and a tier that reports anything stops the
+ones below it: a line that is not a FIX message has no BodyLength worth
+complaining about. `begin_string` is tier 0, everything else defaults to tier
+1. Set `tier` on a rule of your own to slot it in.
+
+Code action kinds:
+>
+    quickfix        repair the message under the cursor or in the selection
+    source.fixAll   repair every broken message in the buffer, as one undo step
+<
+`gra` (or |vim.lsp.buf.code_action()|) offers both. To bind "fix all" directly:
+>lua
+    vim.keymap.set("n", "<leader>ff", function()
+      vim.lsp.buf.code_action({
+        context = { only = { "source.fixAll" } },
+        apply = true,
+      })
+    end)
+<
+`lsp.validate.rules` maps a rule id to its settings. A built-in rule accepts
+`enabled` and `severity`; set the entry to `false` to switch it off. An entry
+with a `check` function defines a rule of your own, taking its id from the key:
+>lua
+    lsp = {
+      validate = {
+        rules = {
+          checksum = false,
+          unknown_tags = {
+            severity = vim.diagnostic.severity.WARN,
+            check = function(ctx)
+              local out = {}
+              for _, field in ipairs(ctx.message:list_fields()) do
+                if field.tag_text == nil then
+                  out[#out + 1] = {
+                    col = field.tag_start,
+                    end_col = field.tag_end,
+                    message = "Unknown tag " .. field.tag,
+                  }
+                end
+              end
+              return out
+            end,
+          },
+        },
+      },
+    }
+<
+Besides `check`, a rule entry accepts `name`, `severity` and `tier`.
+
+`check` receives `ctx` with `buf`, `lnum` (0-based), `line`, `message`, `opts`,
+and a `scratch` table shared by every rule on that line. It returns a list of
+diagnostics with 0-based byte columns `col` and `end_col`, a `message`, an
+optional `severity` (ERROR by default) and `code` (the rule id by default), and
+optional `fixes`. Each fix is `{ title, edits }` where an edit is
+`{ lnum?, col, end_col, new_text }`; `col == end_col` inserts. Fixes may be
+shared between diagnostics — a shared fix is offered only once.
+
+A rule that errors is reported once and skipped; the other rules keep running.
+
+Rule scope is per message. Session-level rules that need the whole message
+stream are not supported yet, and `scope = "session"` is rejected.
+
+The same server answers |vim.lsp.buf.hover()|: the float shows the field's
+decoded name, tag, FIX data type, the dictionary description, the current
+value with its enum meaning, the repeating-group path when the field sits
+inside one, and an onixs.biz reference link. For MsgType (tag 35) it adds the
+message-type description from the FIX repository. Custom quickfix-style
+dictionaries carry names but no descriptions, so their hovers are shorter.
+`lsp.hover.enabled = false` turns hover off on its own;
+`lsp.validate.enabled = false` keeps hover but silences the diagnostics;
+|:FIX-lsp-toggle| (or `lsp.enabled = false`) turns the whole subsystem off.
+Example mapping:
+>lua
+    vim.keymap.set("n", "K", vim.lsp.buf.hover, { buffer = true })
+<
+Diagnostic display is not configured here; use |vim.diagnostic.config()| — with
+one exception. With `annotate.title.position` set to `"replace"` or
+`"replace_front"` the message line is concealed, which leaves it no display
+width for virtual text to attach to: |vim.diagnostic| would drop its text onto
+the row below, or lose it entirely. In those positions the message title
+carries the diagnostics itself, drawn right after it:
+>
+    20251026-09:00:02 CLIENT1=>BROKER1 NewOrderSingle   ■ CheckSum is 001, expected 213
+<
+Severity picks the highlight group, `DiagnosticVirtualTextError` and friends.
+
+Where that happens, `virtual_text` is switched off for this plugin's diagnostic
+namespace so the same message is not drawn twice; the global
+|vim.diagnostic.config()| and every other language server are untouched. On the
+revealed cursor line in `"replace_front"` the raw message is visible, so
+`virtual_text` keeps working there and diagnostics render normally. Underlines
+are invisible on a concealed line either way; the sign column still works.
+
+A buffer with no file name gets code actions but no diagnostics: its document
+URI is `file://`, which does not map back to the buffer. Write the buffer to a
+file to get diagnostics.
 
 
 ==============================================================================
@@ -545,6 +679,18 @@ LUA API                                                       *fix.nvim-api*
 `require("fix").use_dictionary(path)`
     Register a custom dictionary at runtime and re-render open FIX buffers.
     Returns the registered dictionary source.
+
+                                                      *fix.lsp_toggle()*
+`require("fix").lsp_toggle()`
+    Turn the LSP features (diagnostics, fixes, hover) on or off for every FIX
+    buffer.
+
+                                              *fix.validate.register()*
+`require("fix.validate").register(rule)`
+    Add or replace a validation rule at runtime and revalidate open buffers.
+    `rule` needs an `id` and a `check` function; see |fix.nvim-validation|.
+    Unlike rules declared in `lsp.validate.rules`, registered rules survive a
+    later `setup()` call. Returns the rule.
 
                                                     *fix.cache_clear()*
 `require("fix").cache_clear()`

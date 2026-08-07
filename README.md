@@ -11,6 +11,7 @@ Before using this plugin, consider the following known Neovim limitations:
 
 - <a id="long-fix-line-annotations"></a>On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`). You can still explore fields with the [FIX message tree](#fix-message-tree) or `:FIX picker`.
 - Virtual lines above the first buffer line are not displayed ([neovim/neovim#16166](https://github.com/neovim/neovim/issues/16166)). Workaround: avoid `annotate.title.position = "above"`.
+- A FIX message is one very long line: with `wrap` on it spans several screen rows, so a diagnostic float — which `[d` opens when the mapping passes `float = true`, as LazyVim's does — lands on that line's own wrapped continuation and reads as garbled text. A float and `virtual_text` always show the same diagnostic twice; short lines hide that, and in the concealed title positions `virtual_text` is narrowed to the cursor line, so the two always coincide. Workaround: `:setlocal nowrap` as above, drop `float = true` from the mapping, or set `vim.diagnostic.config({ virtual_text = false })` and let the titles carry the diagnostics.
 - On very large files, Neovim's tree-sitter highlighting can freeze the UI when jumping into unparsed regions. Disable highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your distribution's big-file protection handle it.
 
 ## Features
@@ -95,6 +96,24 @@ ranges, Vim operators, and named registers.
 Tree-sitter queries expose fields, messages, and comments as text objects for
 navigation mappings; fix.nvim intentionally installs no default mappings.
 
+### Validation and Fixes
+
+Malformed messages are flagged as you scroll — BodyLength and CheckSum out of
+the box, plus a structural "not a FIX message" check — and repaired through
+standard LSP code actions, one message at a time or the whole buffer at once.
+Rules are plain Lua and can be switched off or added to in the config.
+
+![BodyLength and CheckSum diagnostics on broken messages](./media/validation.png)
+
+### Tag Info on Hover
+
+Hovering a field (`vim.lsp.buf.hover()`) shows what the FIX dictionary knows
+about it: name, type, description, the decoded value, and a reference link.
+For MsgType (tag 35) the float adds the message-type description from the FIX
+repository.
+
+![Dictionary hover for the Side (54) field](./media/hover.png)
+
 ### Customize the Presentation
 
 Formatter hooks control annotations, titles, and tree labels. Filetype rules,
@@ -117,6 +136,7 @@ cache speeds up later sessions; `:FIX cache clear` resets the current file.
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
 | `:FIX dictionary <PATH>` | `require("fix").use_dictionary(path)` | Use a custom FIX dictionary XML file or repository directory |
 | `:FIX yank [--reg=<REGISTER>]` | `require("fix").yank(reg)` | Smart yank: current/selected fields for characterwise targets, selected messages for linewise targets |
+| `:FIX lsp toggle` | `require("fix").lsp_toggle()` | Turn the LSP features (diagnostics, fixes, hover) on or off for every FIX buffer |
 | `:FIX cache clear` | `require("fix").cache_clear()` | Clear in-memory and on-disk cache entries for the current file, then re-render |
 
 ## Configuration
@@ -231,6 +251,41 @@ examples.
     viewport_margin = 50,
   },
 
+  lsp = {
+    enabled = true, -- The whole in-process server: diagnostics, fixes, hover.
+    validate = {
+      enabled = true,
+      debounce_ms = 200,
+      -- Built-in rules are on by default; set a rule to false to switch it off.
+      -- An entry with a `check` function defines a rule of your own.
+      rules = {
+        begin_string = { enabled = true },
+        body_length = { enabled = true },
+        checksum = { enabled = true },
+        -- unknown_tags = {
+        --   severity = vim.diagnostic.severity.WARN,
+        --   tier = 1, -- lower tiers run first and silence the ones below them
+        --   check = function(ctx)
+        --     local out = {}
+        --     for _, field in ipairs(ctx.message:list_fields()) do
+        --       if field.tag_text == nil then
+        --         out[#out + 1] = {
+        --           col = field.tag_start,
+        --           end_col = field.tag_end,
+        --           message = "Unknown tag " .. field.tag,
+        --         }
+        --       end
+        --     end
+        --     return out
+        --   end,
+        -- },
+      },
+    },
+    hover = {
+      enabled = true, -- Dictionary info for the field under the cursor via vim.lsp.buf.hover().
+    },
+  },
+
   tree = {
     summary = {
       formatter = function(message)
@@ -274,6 +329,9 @@ end, "toggle all annotations")
 map("<localleader>x", function()
   fix.browse_tag_online()
 end, "open online tag docs")
+
+-- Dictionary info for the field under the cursor (requires validation enabled).
+map("K", vim.lsp.buf.hover, "tag info")
 
 vim.keymap.set("n", "<localleader>y", function()
   return fix.operator_yank_register("+")
@@ -421,6 +479,90 @@ scroll, which keeps large buffers responsive.
 doing repeated work while a file is still changing. `render.lines_per_batch`
 controls the background cache warm-up chunk size. Higher values can warm the
 cache faster but may make very large files feel less responsive.
+
+### Validation
+
+Validation runs as a language server inside Neovim, so nothing extra needs
+installing. Problems arrive as ordinary diagnostics — signs, `]d`/`[d`,
+`vim.diagnostic.setqflist()` — and repairs arrive as code actions, applied by
+Neovim's own LSP client so that undo works as usual.
+
+Three rules ship built in. `begin_string` reports a line that parses as
+`tag=value` pairs but has no BeginString — a dumped repeating group, a
+truncated line — as "Not a FIX message". `body_length` and `checksum` check
+tags 9 and 10; they are linked, because correcting BodyLength changes the bytes
+CheckSum covers, so a message wrong in both places offers a single "Fix
+BodyLength and CheckSum" action. Separators are normalised, so `|`-, `^`- and
+SOH-delimited logs all validate the same.
+
+Rules run in tiers, lowest first, and a tier that reports something stops the
+ones below it — there is no point complaining about the BodyLength of a line
+that is not a message at all. `begin_string` is tier 0; everything else,
+including your own rules, defaults to tier 1.
+
+| Action | Kind | Effect |
+| --- | --- | --- |
+| `gra` (or `vim.lsp.buf.code_action()`) | `quickfix` | Repair the message under the cursor or in the selection |
+| `vim.lsp.buf.code_action({ context = { only = { "source.fixAll" } }, apply = true })` | `source.fixAll` | Repair every broken message in the buffer, as one undo step |
+
+Rules are ordinary Lua tables keyed by id in `lsp.validate.rules`. A rule sees
+one message and returns diagnostics, each of which may carry the fixes that
+repair it:
+
+```lua
+---@param ctx FixRuleCtx  { buf, lnum, line, message, scratch, opts }
+---@return FixRuleDiagnostic[]|nil
+check = function(ctx)
+  return {
+    {
+      col = 0,                       -- 0-based byte columns within the line
+      end_col = 1,
+      message = "something is off",
+      severity = vim.diagnostic.severity.WARN,  -- optional; ERROR by default
+      fixes = {
+        { title = "Repair it", edits = { { col = 0, end_col = 1, new_text = "8" } } },
+      },
+    },
+  }
+end
+```
+
+`require("fix.validate").register(rule)` adds or replaces a rule at runtime and
+revalidates open buffers; unlike `lsp.validate.rules`, such rules survive a
+later `setup()`. Rule scope is per message for now — session-level rules that
+need to see the whole message stream are not supported yet.
+
+The same server answers `vim.lsp.buf.hover()`: the float shows the field's
+decoded name, tag, FIX data type, the dictionary description, the current value
+with its enum meaning, the repeating-group path when the field sits inside one,
+and an onixs.biz reference link. For MsgType (tag 35) it adds the message-type
+description from the FIX repository. `lsp.hover.enabled = false` turns hover
+off on its own; `lsp.validate.enabled = false` keeps hover but silences the
+diagnostics; `:FIX lsp toggle` (or `lsp.enabled = false`) turns the whole
+subsystem off.
+
+Diagnostic display is not configured here; use `vim.diagnostic.config()` as you
+would for any other server — with one exception. With
+`annotate.title.position = "replace"` or `"replace_front"` the message line is
+concealed, which leaves it no display width for virtual text to attach to:
+`vim.diagnostic` would drop its text onto the row below, or lose it entirely.
+In those positions the message title carries the diagnostics itself, drawn
+right after it:
+
+```
+20251026-09:00:02 CLIENT1=>BROKER1 NewOrderSingle Buy 10 BTCUSD   ■ CheckSum is 001, expected 213
+```
+
+Where that happens, `virtual_text` is switched off for this plugin's diagnostic
+namespace so the same message is not drawn twice — your global
+`vim.diagnostic.config()` and every other language server are untouched. On the
+revealed cursor line in `replace_front` the raw message is visible, so
+`virtual_text` keeps working there and the diagnostics render normally.
+Underlines are invisible on a concealed line either way; the sign column still
+works.
+
+One more caveat: buffers with no file name get code actions but no diagnostics,
+because there is no URI that maps back to them; save the buffer to get them.
 
 ## Development
 

@@ -118,6 +118,13 @@ local function register_commands()
         fix.yank(register, selection)
     end)
 
+    local lsp_parser = top_subparser:add_parser({ name = "lsp", help = "Validation, fixes and hover" })
+    local lsp_subparser = lsp_parser:add_subparsers({ destination = "lsp_command" })
+    local lsp_toggle = lsp_subparser:add_parser({ name = "toggle", help = "Toggle LSP features" })
+    lsp_toggle:set_execute(function()
+        fix.lsp_toggle()
+    end)
+
     local cache_parser = top_subparser:add_parser({ name = "cache", help = "Cache maintenance" })
     local cache_subparser = cache_parser:add_subparsers({ destination = "cache_command" })
     local cache_clear = cache_subparser:add_parser({ name = "clear", help = "Drop cached annotations for this file" })

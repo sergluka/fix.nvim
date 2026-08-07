@@ -9,7 +9,7 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 
 ---@class FixRenderState
----@field rendered { key: string, gen: number, front: boolean }[]  -- index = lnum + 1; sparse
+---@field rendered { key: string, gen: number, front: boolean, diagnostics: table? }[]  -- index = lnum + 1; sparse
 ---@field keys table<string, boolean>              -- every cache key seen in this buffer
 ---@field generation number
 ---@field line_count number                        -- tracked manually: on_lines runs in a fast context
@@ -24,11 +24,21 @@ local function opts()
     return require("fix").opts
 end
 
-local function close_timer(timer)
-    if timer and not timer:is_closing() then
-        timer:stop()
-        timer:close()
+--- The title position that makes titles carry their line's diagnostics, or nil
+--- when they do not. Only the concealed positions do: everywhere else the line
+--- keeps its display width and `vim.diagnostic` renders them itself. The
+--- validator reads this to know when to repaint and how to configure its
+--- namespace, so the rule lives here alone.
+---@return "replace"|"replace_front"|nil
+function M.diagnostics_in_title()
+    local title = opts().annotate.title
+    if not title.enabled then
+        return nil
     end
+    if title.position ~= "replace" and title.position ~= "replace_front" then
+        return nil
+    end
+    return title.position
 end
 
 ---@param buf number
@@ -40,20 +50,33 @@ local function render_lines(buf, srow, erow)
         return
     end
     local o = opts()
+    -- The stored table is replaced whenever the validator revalidates a line,
+    -- so its identity doubles as the "has this changed" marker in the slot.
+    local validate = M.diagnostics_in_title() and require("fix.validate") or nil
     erow = math.min(erow, vim.api.nvim_buf_line_count(buf))
     for lnum = math.max(srow, 0), erow - 1 do
         local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
         local key = Cache.key(line)
         local slot = state.rendered[lnum + 1]
         local front = state.revealed[lnum] == true
-        if not (slot and slot.key == key and slot.gen == state.generation and slot.front == front) then
+        local diagnostics = validate and validate.diagnostics_for(buf, lnum) or nil
+        if
+            not (
+                slot
+                and slot.key == key
+                and slot.gen == state.generation
+                and slot.front == front
+                and slot.diagnostics == diagnostics
+            )
+        then
             local message, _, authoritative = Document.build_line(buf, lnum, line, key)
             local payload = message and Annotate.payload_for(message, key, o) or nil
-            Annotate.apply(o, buf, ns_id, lnum, line, payload, front)
+            Annotate.apply(o, buf, ns_id, lnum, line, payload, front, diagnostics)
             -- A non-authoritative result (tree didn't span the line) must not
             -- mark the slot rendered, or the line would stay bare forever.
             if authoritative then
-                state.rendered[lnum + 1] = { key = key, gen = state.generation, front = front }
+                state.rendered[lnum + 1] =
+                    { key = key, gen = state.generation, front = front, diagnostics = diagnostics }
                 state.keys[key] = true
             end
         end
@@ -188,7 +211,7 @@ local function schedule_debounced_render(buf)
     if not state then
         return
     end
-    close_timer(state.debounce_timer)
+    Scan.close_timer(state.debounce_timer)
     state.debounce_timer = vim.defer_fn(function()
         state.debounce_timer = nil
         if not vim.api.nvim_buf_is_valid(buf) or states[buf] ~= state then
@@ -377,7 +400,7 @@ function M.detach(buf)
     end
     states[buf] = nil
     state.warm:cancel()
-    close_timer(state.debounce_timer)
+    Scan.close_timer(state.debounce_timer)
 end
 
 return M

@@ -46,6 +46,17 @@ T["load version"]["loads repository group structure"] = function(version)
     MiniTest.expect.equality(count > 0, true)
 end
 
+T["load version"]["loads message defs from Messages.xml"] = function(version)
+    local dict = Dictionary.load(version)
+    -- Older repositories name MsgType D "OrderSingle", newer "NewOrderSingle".
+    local def = dict:message_def("D")
+    MiniTest.expect.equality(def.name:find("OrderSingle", 1, true) ~= nil, true)
+    MiniTest.expect.equality(#def.description > 0, true)
+    MiniTest.expect.equality(dict:message_def("ZZZZ"), nil)
+    -- The enum sugar keeps working alongside the new accessor.
+    MiniTest.expect.equality(dict:message("0").name, "Heartbeat")
+end
+
 T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
     local fixt = Dictionary.load("FIXT.1.1")
     local sp2 = Dictionary.load("FIX.5.0SP2")
