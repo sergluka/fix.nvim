@@ -365,9 +365,6 @@ conceal, so FIX buffers set `conceallevel=2`. Use `"replace_front"` to keep
 other lines replaced while showing the active line as raw FIX with normal field
 annotations and the title at the front.
 
-`annotate.message` is kept as a deprecated alias for `annotate.title`. Using it
-emits a warning; if both are set, `annotate.title` wins.
-
                                                    *fix.nvim-validation*
 Validation runs as a language server inside Neovim, started on demand; nothing
 extra needs installing. Problems appear as ordinary diagnostics, so signs,

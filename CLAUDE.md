@@ -8,7 +8,7 @@ Neovim plugin for viewing FIX protocol messages. Runtime dependencies: `xml2lua`
 
 ## Commands
 
-- Run integration tests: `./bin/test-integration` (builds Podman image on first run, then runs the full MiniTest suite — 67 cases inside `tests/integration/`). Single spec: `./bin/test-integration --filter annotate` (resolves to `tests/integration/test_<name>.lua` via `MiniTest.run_file`). Force image rebuild: `./bin/test-integration --rebuild`. Requires Podman >= 5.x.
+- Run integration tests: `./bin/test-integration` (builds Podman image on first run, then runs the full MiniTest suite — 221 cases inside `tests/integration/`). Single spec: `./bin/test-integration --filter annotate` (resolves to `tests/integration/test_<name>.lua` via `MiniTest.run_file`). Force image rebuild: `./bin/test-integration --rebuild`. Requires Podman >= 5.x.
 - Lint: `luacheck .` (config in `.luacheckrc` — Lua 5.1, `vim` global).
 - Format: `stylua --check .` (pinned to stylua 2.3.0 — match locally; CI enforces this exact version).
 - CI (`.github/workflows/ci.yml`) runs `stylua --check .` + `luacheck` on host and the Podman integration suite on every push/PR.

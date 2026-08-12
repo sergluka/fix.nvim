@@ -65,12 +65,7 @@ local function match_override(route, rules)
     local best_score = -1
 
     for _, rule in ipairs(rules or {}) do
-        if
-            type(rule) == "table"
-            and type(rule.highlight) == "string"
-            and match_part(rule.sender, route.sender)
-            and match_part(rule.target, route.target)
-        then
+        if match_part(rule.sender, route.sender) and match_part(rule.target, route.target) then
             local score = match_score(rule.sender, route.sender) + match_score(rule.target, route.target)
             if score > best_score then
                 best_score = score

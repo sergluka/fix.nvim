@@ -659,12 +659,15 @@ end
 
 ---@param mode any
 ---@return DictionaryMode
+local function non_empty_string(v)
+    return type(v) == "string" and v ~= ""
+end
+
 local function normalize_mode(mode)
     mode = mode or "auto"
-    assert(
-        mode == "auto" or mode == "repository" or mode == "quickfix",
-        "dictionary mode must be auto, repository, or quickfix"
-    )
+    vim.validate("dictionary.mode", mode, function(v)
+        return v == "auto" or v == "repository" or v == "quickfix"
+    end, "'auto'|'repository'|'quickfix'")
     return mode
 end
 
@@ -674,16 +677,16 @@ local function normalize_tags(tags)
     if tags == nil then
         return nil
     end
-    assert(type(tags) == "table", "dictionary tags must be a table")
+    vim.validate("dictionary.tags", tags, "table")
 
     local normalized = {}
     for tag, decoder in pairs(tags) do
+        local name = ("dictionary.tags[%s]"):format(tostring(tag))
         local tag_number = tonumber(tag)
-        assert(
-            tag_number ~= nil and tag_number > 0 and tag_number % 1 == 0,
-            "dictionary tag keys must be positive integers"
-        )
-        assert(type(decoder) == "function", "dictionary tag decoder for " .. tostring(tag) .. " must be a function")
+        vim.validate(name, tag_number, function(v)
+            return v ~= nil and v > 0 and v % 1 == 0
+        end, "positive integer tag")
+        vim.validate(name, decoder, "function")
         normalized[tag_number] = decoder
     end
     return normalized
@@ -700,15 +703,15 @@ local function normalize_config(config, explicit_version)
         return config, "auto", explicit_version, nil
     end
 
-    assert(type(config) == "table", "dictionary entry must be a path string or table")
+    vim.validate("dictionary entry", config, "table", "a path string or a table")
     if config.path == nil then
         assert(config.tags ~= nil, "dictionary entry must have a non-empty path")
     else
-        assert(type(config.path) == "string" and config.path ~= "", "dictionary entry must have a non-empty path")
+        vim.validate("dictionary.path", config.path, non_empty_string, "non-empty path string")
     end
     local version = explicit_version or config.version
     if version ~= nil then
-        assert(type(version) == "string" and version ~= "", "dictionary version must be a non-empty string")
+        vim.validate("dictionary.version", version, non_empty_string, "non-empty string")
     end
     return config.path, normalize_mode(config.mode), version, normalize_tags(config.tags)
 end
@@ -843,7 +846,7 @@ local function prepare_registry(dictionaries)
     if dictionaries == nil then
         return {}
     end
-    assert(type(dictionaries) == "table", "dictionaries must be a table")
+    vim.validate("dictionaries", dictionaries, "table")
 
     local registry = {}
     local list_versions = {}
@@ -872,7 +875,7 @@ local function prepare_registry(dictionaries)
 
     for version, config in pairs(dictionaries) do
         if type(version) ~= "number" then
-            assert(type(version) == "string" and version ~= "", "dictionary version keys must be non-empty strings")
+            vim.validate("dictionaries key", version, non_empty_string, "non-empty version string")
             registry[version] = prepare_source(config, version)
         end
     end

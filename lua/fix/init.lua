@@ -16,7 +16,6 @@
 ---@field annotate.group.highlight.enabled? boolean
 ---@field annotate.group.highlight.palette? string[]
 ---@field annotate.group.highlight.target? "raw"|"annotation"|"both"
----@field annotate.group.visual? table Deprecated alias for annotate.group.highlight.
 ---@field annotate.tag? table
 ---@field annotate.tag.enabled? boolean
 ---@field annotate.tag.formatter? fun(field: Field): {text: string, highlight: string}
@@ -33,7 +32,6 @@
 ---@field annotate.title.route.overrides? FixRouteRule[]
 ---@field annotate.title.route.resolver? fun(route: FixRoute, message: Message): string|nil
 ---@field annotate.title.formatter? fun(message: Message): table
----@field annotate.message? table Deprecated alias for annotate.title.
 ---@field cache? table
 ---@field cache.persist? table
 ---@field cache.persist.enabled? boolean
@@ -189,33 +187,6 @@ local default_settings = {
     },
 }
 
----@param opts FixOpts|nil
----@return FixOpts
-local function normalize_opts(opts)
-    local normalized = vim.deepcopy(opts or {})
-    local annotate = normalized.annotate
-    -- TODO: remove this later
-    if type(annotate) == "table" and annotate.message ~= nil then
-        vim.notify_once("fix.nvim: annotate.message is deprecated; use annotate.title", vim.log.levels.WARN)
-        if annotate.title == nil then
-            annotate.title = annotate.message
-        end
-        annotate.message = nil
-    end
-    local group = type(annotate) == "table" and annotate.group or nil
-    if type(group) == "table" and group.visual ~= nil then
-        vim.notify_once(
-            "fix.nvim: annotate.group.visual is deprecated; use annotate.group.highlight",
-            vim.log.levels.WARN
-        )
-        if group.highlight == nil then
-            group.highlight = group.visual
-        end
-        group.visual = nil
-    end
-    return normalized
-end
-
 ---@param opts FixOpts
 ---@param dictionaries? DictionaryRegistry
 local function validate_opts(opts, dictionaries)
@@ -224,48 +195,38 @@ local function validate_opts(opts, dictionaries)
     end
 
     local persist = opts.cache.persist
-    local function validate_limit(name, value, integer)
-        if value == false then
-            return
-        end
-        local valid_number = type(value) == "number" and value > 0 and value == value and value < math.huge
-        if not valid_number or (integer and value % 1 ~= 0) then
-            local kind = integer and "positive integer" or "positive number"
-            error("fix.nvim: cache.persist." .. name .. " must be false or a " .. kind, 2)
+    local function limit_validator(integer)
+        return function(value)
+            if value == false then
+                return true
+            end
+            local valid_number = type(value) == "number" and value > 0 and value == value and value < math.huge
+            return valid_number and not (integer and value % 1 ~= 0)
         end
     end
 
-    validate_limit("max_files", persist.max_files, true)
-    validate_limit("max_bytes", persist.max_bytes, false)
+    vim.validate("cache.persist.max_files", persist.max_files, limit_validator(true), "false or a positive integer")
+    vim.validate("cache.persist.max_bytes", persist.max_bytes, limit_validator(false), "false or a positive number")
 
     if persist.enabled and persist.max_files == false and persist.max_bytes == false then
         error("fix.nvim: cache.persist.max_files and max_bytes cannot both be false when persistence is enabled", 2)
     end
 
     for _, name in ipairs({ "summary", "field", "group" }) do
-        if type(opts.tree[name].formatter) ~= "function" then
-            error("fix.nvim: tree." .. name .. ".formatter must be a function", 2)
-        end
+        vim.validate("tree." .. name .. ".formatter", opts.tree[name].formatter, "function")
     end
 
     local lsp = opts.lsp
-    if type(lsp.enabled) ~= "boolean" then
-        error("fix.nvim: lsp.enabled must be a boolean", 2)
-    end
+    vim.validate("lsp.enabled", lsp.enabled, "boolean")
+    vim.validate("lsp.validate", lsp.validate, "table")
     local validate = lsp.validate
-    if type(validate) ~= "table" or type(validate.enabled) ~= "boolean" then
-        error("fix.nvim: lsp.validate.enabled must be a boolean", 2)
-    end
-    if type(lsp.hover) ~= "table" or type(lsp.hover.enabled) ~= "boolean" then
-        error("fix.nvim: lsp.hover.enabled must be a boolean", 2)
-    end
-    local debounce = validate.debounce_ms
-    if type(debounce) ~= "number" or debounce < 0 or debounce ~= debounce or debounce == math.huge then
-        error("fix.nvim: lsp.validate.debounce_ms must be a non-negative number", 2)
-    end
-    if type(validate.rules) ~= "table" then
-        error("fix.nvim: lsp.validate.rules must be a table of rule id to settings", 2)
-    end
+    vim.validate("lsp.validate.enabled", validate.enabled, "boolean")
+    vim.validate("lsp.hover", lsp.hover, "table")
+    vim.validate("lsp.hover.enabled", lsp.hover.enabled, "boolean")
+    vim.validate("lsp.validate.debounce_ms", validate.debounce_ms, function(v)
+        return type(v) == "number" and v >= 0 and v == v and v < math.huge
+    end, "non-negative finite number")
+    vim.validate("lsp.validate.rules", validate.rules, "table")
     for id, entry in pairs(validate.rules) do
         if type(id) ~= "string" then
             error("fix.nvim: lsp.validate.rules must be keyed by rule id", 2)
@@ -276,64 +237,44 @@ local function validate_opts(opts, dictionaries)
         end
     end
 
+    local function one_of(values)
+        local check = function(v)
+            return vim.tbl_contains(values, v)
+        end
+        return check, "'" .. table.concat(values, "'|'") .. "'"
+    end
+    local function non_empty_string(v)
+        return type(v) == "string" and v ~= ""
+    end
+    local function validate_palette(name, palette)
+        vim.validate(name, palette, function(v)
+            return type(v) == "table" and #v > 0
+        end, "non-empty list of highlight groups")
+        for i, group in ipairs(palette) do
+            vim.validate(("%s[%d]"):format(name, i), group, non_empty_string, "highlight group name")
+        end
+    end
+
     local route = opts.annotate.title.route
     local group_highlight = opts.annotate.group.highlight
-    local title_position = opts.annotate.title.position
-    if
-        title_position ~= "above"
-        and title_position ~= "below"
-        and title_position ~= "front"
-        and title_position ~= "replace"
-        and title_position ~= "replace_front"
-    then
-        error("fix.nvim: annotate.title.position must be 'above', 'below', 'front', 'replace', or 'replace_front'", 2)
+    vim.validate(
+        "annotate.title.position",
+        opts.annotate.title.position,
+        one_of({ "above", "below", "front", "replace", "replace_front" })
+    )
+    vim.validate("annotate.title.route.mode", route.mode, one_of({ "direction", "sender", "pair" }))
+    validate_palette("annotate.title.route.palette", route.palette)
+    vim.validate("annotate.title.route.overrides", route.overrides, "table")
+    for i, rule in ipairs(route.overrides) do
+        local prefix = ("annotate.title.route.overrides[%d]"):format(i)
+        vim.validate(prefix, rule, "table")
+        vim.validate(prefix .. ".sender", rule.sender, "string", true)
+        vim.validate(prefix .. ".target", rule.target, "string", true)
+        vim.validate(prefix .. ".highlight", rule.highlight, non_empty_string, "highlight group name")
     end
-    if route.mode ~= "direction" and route.mode ~= "sender" and route.mode ~= "pair" then
-        error("fix.nvim: annotate.title.route.mode must be 'direction', 'sender', or 'pair'", 2)
-    end
-    if type(route.palette) ~= "table" or #route.palette == 0 then
-        error("fix.nvim: annotate.title.route.palette must contain at least one highlight group", 2)
-    end
-    for _, group in ipairs(route.palette) do
-        if type(group) ~= "string" or group == "" then
-            error("fix.nvim: annotate.title.route.palette must contain highlight group names", 2)
-        end
-    end
-    if type(route.overrides) ~= "table" then
-        error("fix.nvim: annotate.title.route.overrides must be a list", 2)
-    end
-    for _, rule in ipairs(route.overrides) do
-        if type(rule) ~= "table" then
-            error("fix.nvim: annotate.title.route.overrides entries must be tables", 2)
-        end
-        if rule.sender ~= nil and type(rule.sender) ~= "string" then
-            error("fix.nvim: annotate.title.route.overrides sender must be a string", 2)
-        end
-        if rule.target ~= nil and type(rule.target) ~= "string" then
-            error("fix.nvim: annotate.title.route.overrides target must be a string", 2)
-        end
-        if type(rule.highlight) ~= "string" or rule.highlight == "" then
-            error("fix.nvim: annotate.title.route.overrides highlight must be a highlight group", 2)
-        end
-    end
-    if route.resolver ~= nil and type(route.resolver) ~= "function" then
-        error("fix.nvim: annotate.title.route.resolver must be a function", 2)
-    end
-    if type(group_highlight.palette) ~= "table" or #group_highlight.palette == 0 then
-        error("fix.nvim: annotate.group.highlight.palette must contain at least one highlight group", 2)
-    end
-    if
-        group_highlight.target ~= "raw"
-        and group_highlight.target ~= "annotation"
-        and group_highlight.target ~= "both"
-    then
-        error("fix.nvim: annotate.group.highlight.target must be 'raw', 'annotation', or 'both'", 2)
-    end
-    for _, group in ipairs(group_highlight.palette) do
-        if type(group) ~= "string" or group == "" then
-            error("fix.nvim: annotate.group.highlight.palette must contain highlight group names", 2)
-        end
-    end
+    vim.validate("annotate.title.route.resolver", route.resolver, "function", true)
+    validate_palette("annotate.group.highlight.palette", group_highlight.palette)
+    vim.validate("annotate.group.highlight.target", group_highlight.target, one_of({ "raw", "annotation", "both" }))
 end
 
 local route_highlight_palettes = {
@@ -530,7 +471,7 @@ end
 ---@param opts FixOpts
 function M.setup(opts)
     local prev_opts = M.opts
-    local next_opts = vim.tbl_deep_extend("force", default_settings, normalize_opts(opts))
+    local next_opts = vim.tbl_deep_extend("force", default_settings, vim.deepcopy(opts or {}))
     local dictionaries = Dictionary.prepare(next_opts.dictionaries)
     validate_opts(next_opts, dictionaries)
 

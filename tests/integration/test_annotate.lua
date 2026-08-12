@@ -216,45 +216,6 @@ T["position=replace_front draws active line title at front of raw line"] = funct
     MiniTest.expect.equality(H.inline_label_count(nvim(), "BeginString"), 1)
 end
 
-T["legacy annotate.message config warns and maps to title"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { message = { position = "below" } } })]])
-    H.load_fixture(nvim(), "4.4.fix")
-    H.expect_notified(nvim(), "annotate%.message is deprecated")
-
-    local has_below_anchor = false
-    for _, mark in ipairs(H.get_extmarks(nvim())) do
-        if mark.details.virt_lines and mark.details.virt_lines_above == false then
-            has_below_anchor = true
-        end
-    end
-    MiniTest.expect.equality(has_below_anchor, true)
-end
-
-T["annotate.title wins over legacy annotate.message"] = function()
-    nvim().lua([[
-        require("fix").setup({
-            annotate = {
-                message = { position = "below" },
-                title = { position = "front" },
-            },
-        })
-    ]])
-    H.load_fixture(nvim(), "4.4.fix")
-    H.expect_notified(nvim(), "annotate%.message is deprecated")
-    H.expect_virt_lines_count(nvim(), 0)
-
-    local front_titles = 0
-    for _, mark in ipairs(H.get_extmarks(nvim())) do
-        if mark.row >= 1 and mark.col == 0 and mark.details.virt_text_pos == "inline" then
-            local vt = mark.details.virt_text
-            if vt and vt[1] and type(vt[1][2]) == "string" and vt[1][2]:match("^FixRoute") then
-                front_titles = front_titles + 1
-            end
-        end
-    end
-    MiniTest.expect.equality(front_titles, 2)
-end
-
 T["route title highlights distinguish opposite directions"] = function()
     set_fix_lines({
         "8=FIX.4.4|9=70|35=0|34=1|49=CLIENT1|56=BROKER1|52=20251026-09:02:00.000|10=198|",
@@ -625,24 +586,6 @@ T["repeating group highlight target rejects invalid values"] = function()
     ]])
 
     MiniTest.expect.equality(err:find("annotate.group.highlight.target", 1, true) ~= nil, true)
-end
-
-T["legacy group visual config warns and maps to highlight"] = function()
-    nvim().lua([[require("fix").setup({ annotate = { group = { visual = { enabled = false } } } })]])
-
-    H.expect_notified(nvim(), "annotate%.group%.visual is deprecated")
-    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), false)
-end
-
-T["group highlight config wins over legacy visual config"] = function()
-    nvim().lua([[
-        require("fix").setup({
-            annotate = { group = { highlight = { enabled = true }, visual = { enabled = false } } },
-        })
-    ]])
-
-    H.expect_notified(nvim(), "annotate%.group%.visual is deprecated")
-    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.group.highlight.enabled]]), true)
 end
 
 T["older repository FIX versions render repeating group paths"] = function()

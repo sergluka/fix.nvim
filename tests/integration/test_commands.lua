@@ -511,7 +511,7 @@ T["setup dictionaries rejects invalid mode"] = function()
         end))
     ]])
 
-    MiniTest.expect.equality(err:find("dictionary mode must be auto, repository, or quickfix", 1, true) ~= nil, true)
+    MiniTest.expect.equality(err:find("dictionary.mode", 1, true) ~= nil, true)
 end
 
 T["setup dictionaries rejects missing path"] = function()
@@ -541,7 +541,7 @@ T["setup dictionaries rejects invalid custom tags table"] = function()
         end))
     ]])
 
-    MiniTest.expect.equality(err:find("dictionary tags must be a table", 1, true) ~= nil, true)
+    MiniTest.expect.equality(err:find("dictionary.tags", 1, true) ~= nil, true)
 end
 
 T["setup dictionaries rejects non-function custom tag decoder"] = function()
@@ -559,7 +559,7 @@ T["setup dictionaries rejects non-function custom tag decoder"] = function()
         end))
     ]])
 
-    MiniTest.expect.equality(err:find("dictionary tag decoder for 5001 must be a function", 1, true) ~= nil, true)
+    MiniTest.expect.equality(err:find("dictionary.tags[5001]", 1, true) ~= nil, true)
 end
 
 T["setup dictionaries rejects pathless custom tags without version"] = function()
