@@ -1,5 +1,6 @@
 -- TODO: competition?
--- TODO: highlight values based on Type
+-- TODO: templates?
+-- TODO: highlight values based on Type?
 
 ---@alias FixTreeFormatterChunk { [1]: string, [2]: string? }
 ---@alias FixTreeFormatterResult FixTreeFormatterChunk|FixTreeFormatterChunk[]
