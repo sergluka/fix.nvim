@@ -125,6 +125,20 @@ local function register_commands()
         fix.lsp_toggle()
     end)
 
+    local overrides_parser = top_subparser:add_parser({ name = "overrides", help = "Per-buffer override diagnostics" })
+    overrides_parser:set_execute(function()
+        fix.overrides_show()
+    end)
+    local overrides_subparser = overrides_parser:add_subparsers({ destination = "overrides_command" })
+    local overrides_show = overrides_subparser:add_parser({ name = "show", help = "Show effective overrides" })
+    overrides_show:set_execute(function()
+        fix.overrides_show()
+    end)
+    local overrides_refresh = overrides_subparser:add_parser({ name = "refresh", help = "Re-resolve overrides" })
+    overrides_refresh:set_execute(function()
+        fix.overrides_refresh()
+    end)
+
     local cache_parser = top_subparser:add_parser({ name = "cache", help = "Cache maintenance" })
     local cache_subparser = cache_parser:add_subparsers({ destination = "cache_command" })
     local cache_clear = cache_subparser:add_parser({ name = "clear", help = "Drop cached annotations for this file" })
@@ -135,5 +149,33 @@ local function register_commands()
     Cmdparse.create_user_command(parser, nil, { range = true })
 end
 
+--- Registers `fix_*` as recognized `.editorconfig` properties (`:h
+--- editorconfig-custom-properties`) so Nvim accepts them and stores them in
+--- `vim.b.editorconfig`, which the overrides' editorconfig layer reads.
+--- `pcall` guards a runtime without the `editorconfig` module.
+---
+--- The callbacks deliberately don't write `vim.b[bufnr][name]`: editorconfig
+--- applies after ftplugins, so that would clobber a user-set `vim.b.fix_*`
+--- and invert the documented precedence, and no callback fires for a removed
+--- property, leaving the layer stale. They only make Nvim accept the name and
+--- trigger a refresh.
+local function register_editorconfig()
+    local ok_ec, editorconfig = pcall(require, "editorconfig")
+    if not ok_ec then
+        return
+    end
+    local Overrides = require("fix.overrides")
+    for _, var in ipairs(Overrides.EDITORCONFIG_PROPERTIES) do
+        editorconfig.properties[var] = function(bufnr, val)
+            local reason = Overrides.validate_editorconfig(var, val)
+            if reason then
+                error(reason, 0)
+            end
+            Overrides.schedule_editorconfig_refresh(bufnr)
+        end
+    end
+end
+
 register_treesitter()
 register_commands()
+register_editorconfig()

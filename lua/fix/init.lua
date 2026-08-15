@@ -59,17 +59,27 @@
 ---@field tree.group.formatter? fun(group: FixTreeGroup, field: Field): FixTreeFormatterResult
 ---@field fallback_version? string
 ---@field dictionaries? table<string|integer, string|FixDictionarySpec>
+---@field formatters? table
+---@field formatters.tag? table<string, fun(field: Field): {text: string, highlight: string}>
+---@field formatters.value? table<string, fun(field: Field): {text: string, highlight: string}>
+---@field formatters.title? table<string, fun(message: Message): table>
+---@field overrides? table
+---@field overrides.modeline? table
+---@field overrides.modeline.enabled? boolean
+---@field overrides.modeline.allow_paths? boolean
 
 ---@class FixDictionarySpec
 ---@field path? string
 ---@field mode? "auto"|"repository"|"quickfix"
 ---@field version? string
+---@field name? string
 ---@field tags? table<number|string, FixTagDecoder>
 
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
 local Dictionary = require("fix.dictionary")
 local Document = require("fix.document")
+local Overrides = require("fix.overrides")
 local Persist = require("fix.persist")
 local Render = require("fix.render")
 local TagFormatter = require("fix.formatters.tag")
@@ -84,6 +94,12 @@ local Yank = require("fix.yank")
 
 local M = {}
 
+local builtin_formatters = {
+    tag = TagFormatter.default,
+    value = ValueFormatter.default,
+    title = TitleFormatter.default,
+}
+
 local function refresh_tree()
     local tree = package.loaded["fix.neo_tree"]
     if type(tree) == "table" and type(tree.refresh) == "function" then
@@ -91,9 +107,40 @@ local function refresh_tree()
     end
 end
 
+--- Reacts to an overrides diff. Lives here, not in `fix.overrides`, so that
+--- module never requires the renderer or validator at load time.
+---@param buf number
+---@param diff FixOverrideRefreshResult
+local function handle_override_change(buf, diff)
+    if diff.suffix then
+        Render.reset_keys(buf) -- before the rerender, or dead namespace keys get persisted
+    end
+    if diff.suffix or diff.annotate then
+        Render.rerender(buf)
+    end
+    if diff.annotate then
+        -- annotate.title.* changes what the diagnostic virtual_text resolver
+        -- would decide; nothing else re-renders it without a fresh publish.
+        Validate.refresh_virtual_text()
+    end
+    if diff.dictionary then
+        refresh_tree()
+    end
+    if diff.lsp then
+        Validate.sync(buf)
+    end
+end
+
+Overrides.on_change(handle_override_change)
+
 local default_settings = {
     fallback_version = Consts.FixVersion.FIX_4_4,
     dictionaries = {},
+    formatters = {
+        tag = {},
+        value = {},
+        title = {},
+    },
     ft = {
         extensions = { "fix", "fixlog" },
         pattern = { ".*%.fix.txt" },
@@ -185,12 +232,20 @@ local default_settings = {
             formatter = TreeGroupFormatter.default,
         },
     },
+    overrides = {
+        modeline = {
+            enabled = true,
+            -- Off by default: a path here is chosen by whoever wrote the log.
+            -- See resolve_dictionary_value in overrides/resolve.lua for the risks.
+            allow_paths = false,
+        },
+    },
 }
 
 ---@param opts FixOpts
----@param dictionaries? DictionaryRegistry
+---@param dictionaries? DictionaryRegistries
 local function validate_opts(opts, dictionaries)
-    if not Dictionary.has_version(opts.fallback_version, dictionaries) then
+    if not Dictionary.has_version(opts.fallback_version, dictionaries and dictionaries.by_version) then
         error("fix.nvim: fallback_version has no dictionary: " .. tostring(opts.fallback_version), 2)
     end
 
@@ -214,6 +269,20 @@ local function validate_opts(opts, dictionaries)
 
     for _, name in ipairs({ "summary", "field", "group" }) do
         vim.validate("tree." .. name .. ".formatter", opts.tree[name].formatter, "function")
+    end
+
+    vim.validate("overrides.modeline.enabled", opts.overrides.modeline.enabled, "boolean")
+    vim.validate("overrides.modeline.allow_paths", opts.overrides.modeline.allow_paths, "boolean")
+
+    for _, namespace in ipairs({ "tag", "value", "title" }) do
+        local group = opts.formatters[namespace]
+        vim.validate("formatters." .. namespace, group, "table")
+        for name, formatter in pairs(group) do
+            if name == "default" then
+                error("fix.nvim: formatters." .. namespace .. ".default is reserved for the built-in formatter", 2)
+            end
+            vim.validate("formatters." .. namespace .. "." .. tostring(name), formatter, "function")
+        end
     end
 
     local lsp = opts.lsp
@@ -407,6 +476,9 @@ local function register_autocmds()
         group = group,
         pattern = "fix",
         callback = function(args)
+            -- Must run first: Render.attach loads the persist cache, and the
+            -- persist gate is inert until this buffer's override state exists.
+            Overrides.attach(args.buf)
             Render.attach(args.buf)
             Validate.attach(args.buf)
         end,
@@ -416,6 +488,7 @@ local function register_autocmds()
         group = group,
         callback = function(args)
             if vim.bo[args.buf].filetype == "fix" then
+                Overrides.attach(args.buf)
                 Render.attach(args.buf)
                 Validate.attach(args.buf)
             end
@@ -486,6 +559,8 @@ function M.setup(opts)
     register_autocmds()
 
     if is_resetup then
+        -- Must run before anything below reads Overrides.effective(buf).
+        Overrides.refresh_all()
         Validate.reattach_all()
         local dictionaries_invalidated = false
         if
@@ -558,7 +633,7 @@ end
 function M.lsp_toggle()
     local enabled = not M.opts.lsp.enabled
     M.opts.lsp.enabled = enabled
-    Validate.set_enabled(enabled)
+    Validate.sync_all()
     vim.notify("fix.nvim: LSP features " .. (enabled and "enabled" or "disabled"), vim.log.levels.INFO)
 end
 
@@ -624,6 +699,73 @@ function M.cache_clear()
     refresh_tree()
 end
 
+---@param value any
+---@param kind "boolean"|"enum"|"dictionary"|"formatter"
+---@return string
+local function describe_override_value(value, kind)
+    if kind == "dictionary" then
+        return value.name or value.source.version
+    end
+    if kind == "formatter" then
+        return value.name
+    end
+    return tostring(value)
+end
+
+--- `:FIX overrides show`: winning value and layer per key, plus parse
+--- warnings. A diagnostic for "why is this buffer different", not an API.
+function M.overrides_show()
+    local buf = vim.api.nvim_get_current_buf()
+    if vim.bo[buf].filetype ~= "fix" then
+        vim.notify("fix.nvim: not a FIX buffer", vim.log.levels.WARN)
+        return
+    end
+
+    local info = Overrides.describe(buf)
+    if vim.tbl_isempty(info.overrides) and vim.tbl_isempty(info.warnings) then
+        vim.notify("fix.nvim: no overrides in effect for this buffer", vim.log.levels.INFO)
+        return
+    end
+
+    local paths = vim.tbl_keys(info.overrides)
+    table.sort(paths)
+    local lines = { string.format("fix.nvim overrides (buffer %d):", buf) }
+    for _, path in ipairs(paths) do
+        local entry = info.overrides[path]
+        lines[#lines + 1] =
+            string.format("  %s = %s  [%s]", path, describe_override_value(entry.value, entry.kind), entry.layer)
+    end
+    for _, warning in ipairs(info.warnings) do
+        lines[#lines + 1] = "  warning: " .. warning.text
+    end
+    vim.notify(table.concat(lines, "\n"), vim.log.levels.INFO)
+end
+
+--- `:FIX overrides refresh`: the documented way to apply a `:let b:fix_* =
+--- ...` mid-session (mutating `vim.b` isn't observable) or to pick up a
+--- dictionary XML edited on disk.
+function M.overrides_refresh()
+    local buf = vim.api.nvim_get_current_buf()
+    if vim.bo[buf].filetype ~= "fix" then
+        vim.notify("fix.nvim: not a FIX buffer", vim.log.levels.WARN)
+        return
+    end
+    Overrides.refresh(buf)
+    vim.notify("fix.nvim: overrides refreshed", vim.log.levels.INFO)
+end
+
+--- `default` resolves to the built-in formatter; an unknown name returns nil.
+---@param namespace "tag"|"value"|"title"
+---@param name string
+---@return function|nil
+function M.resolve_formatter(namespace, name)
+    if name == "default" then
+        return builtin_formatters[namespace]
+    end
+    local group = M.opts.formatters[namespace]
+    return group and group[name]
+end
+
 ---@param path string
 function M.use_dictionary(path)
     local source = Dictionary.register(path)
@@ -640,12 +782,12 @@ end
 ---@param regname string?
 ---@param selection? FixYankSelection
 function M.yank(regname, selection)
-    Yank.yank(M.opts, regname, selection)
+    Yank.yank(Overrides.effective(vim.api.nvim_get_current_buf()), regname, selection)
 end
 
 ---@param motion_type string
 function M.operator_yank(motion_type)
-    Yank.operator_yank(M.opts, motion_type)
+    Yank.operator_yank(Overrides.effective(vim.api.nvim_get_current_buf()), motion_type)
 end
 
 ---@param regname string?

@@ -13,6 +13,7 @@ local STUB_INSTALL = [[
 	_G._fix_test_ui_opens = {}
 	_G._fix_test_picker_opens = 0
 	_G._fix_test_tree_opens = 0
+	_G._fix_test_tree_refreshes = 0
 	_G._fix_test_selects = {}
 	_G._fix_test_select_choice = nil
 
@@ -52,6 +53,9 @@ local STUB_INSTALL = [[
 	package.loaded["fix.neo_tree"] = {
 		open = function()
 			_G._fix_test_tree_opens = _G._fix_test_tree_opens + 1
+		end,
+		refresh = function()
+			_G._fix_test_tree_refreshes = _G._fix_test_tree_refreshes + 1
 		end,
 	}
 ]]
@@ -138,6 +142,27 @@ end
 function M.wait_validated(nvim, timeout_ms)
     local ok = M.wait_for(nvim, [[require("fix.validate").is_idle(vim.api.nvim_get_current_buf())]], timeout_ms or 5000)
     MiniTest.expect.equality(ok, true)
+end
+
+--- The stock virtual_text marks the diagnostic handler placed for our own
+--- namespace. Switches to `buf` first when given.
+function M.stock_virt_text(nvim, buf)
+    if buf then
+        nvim.cmd("buffer " .. buf)
+    end
+    return nvim.lua_get([[(function()
+		local client = vim.lsp.get_clients({ bufnr = 0, name = "fix-validate" })[1]
+		local ns = vim.diagnostic.get_namespace(vim.lsp.diagnostic.get_namespace(client.id, false))
+		local virt_text_ns = ns.user_data.virt_text_ns
+		local out = {}
+		if not virt_text_ns then return out end
+		for _, m in ipairs(vim.api.nvim_buf_get_extmarks(0, virt_text_ns, 0, -1, { details = true })) do
+			local parts = {}
+			for _, chunk in ipairs(m[4].virt_text or {}) do parts[#parts + 1] = chunk[1] end
+			out[#out + 1] = { lnum = m[2], text = table.concat(parts) }
+		end
+		return out
+	end)()]])
 end
 
 --- Diagnostics of the current buffer, ordered by position then rule.
@@ -306,6 +331,10 @@ end
 
 function M.get_tree_opens(nvim)
     return nvim.lua_get("_G._fix_test_tree_opens")
+end
+
+function M.get_tree_refreshes(nvim)
+    return nvim.lua_get("_G._fix_test_tree_refreshes")
 end
 
 --- Labels of every vim.ui.select menu shown so far, newest last.

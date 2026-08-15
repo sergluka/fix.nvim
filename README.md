@@ -12,6 +12,7 @@ Before using this plugin, consider the following known Neovim limitations:
 - <a id="long-fix-line-annotations"></a>On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`). You can still explore fields with the [FIX message tree](#fix-message-tree) or `:FIX picker`.
 - Virtual lines above the first buffer line are not displayed ([neovim/neovim#16166](https://github.com/neovim/neovim/issues/16166)). Workaround: avoid `annotate.title.position = "above"`.
 - A FIX message is one very long line: with `wrap` on it spans several screen rows, so a diagnostic float — which `[d` opens when the mapping passes `float = true`, as LazyVim's does — lands on that line's own wrapped continuation and reads as garbled text. A float and `virtual_text` always show the same diagnostic twice; short lines hide that, and in the concealed title positions `virtual_text` is narrowed to the cursor line, so the two always coincide. Workaround: `:setlocal nowrap` as above, drop `float = true` from the mapping, or set `vim.diagnostic.config({ virtual_text = false })` and let the titles carry the diagnostics.
+- Opening a `.editorconfig` file errors with `E5108: … invalid key: 21` from Neovim's own `syntax/editorconfig.vim`, and its property names lose their highlighting. That file passes every registered property name to `vim.cmd.syntax{…}`, which silently caps positional arguments at 20, so it breaks once more than 18 properties exist — Neovim ships 10 and this plugin adds 13 for [per-buffer overrides](#per-buffer-overrides). It affects only the highlighting of `.editorconfig` files themselves; FIX buffers and the overrides are unaffected — see [neovim/neovim#41314](https://github.com/neovim/neovim/issues/41314). Workaround: none needed unless the highlighting matters to you, in which case drop the plugin's `editorconfig` support by removing the `fix_*` property registration in `plugin/fix.lua`.
 - On very large files, Neovim's tree-sitter highlighting can freeze the UI when jumping into unparsed regions. Disable highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your distribution's big-file protection handle it.
 
 ## Features
@@ -119,6 +120,126 @@ repository.
 Formatter hooks control annotations, titles, and tree labels. Filetype rules,
 route colors, and plugin highlight groups are also configurable.
 
+### Per-Buffer Overrides
+
+A `# fix: key=value, key=value` line in the first 5 lines of a buffer
+overrides a whitelisted subset of settings for that buffer only — which
+annotations show, LSP features, the dictionary, and formatters:
+
+```
+# fix: annotate.title.enabled=false, dictionary=my-custom-dict
+8=FIX.4.4|9=112|35=D|34=1|49=CLIENT1|56=BROKER1|52=20260101-00:00:00.000|10=000|
+```
+
+Four layers apply, strongest first, with the global `setup()` opts as the
+base underneath all of them:
+
+| Layer | How |
+| --- | --- |
+| Modeline | `# fix: key=value` in the first 5 lines |
+| `vim.b` | `b:fix_<key>` (flat) or a nested `b:fix` table |
+| `.editorconfig` | `fix_<key>` properties |
+| `vim.g` | `g:fix_<key>` (flat) or a nested `g:fix` table, buffer-wide default |
+
+A buffer's own override always wins over the `:FIX annotations` and `:FIX lsp
+toggle` runtime toggles, since those two mutate the global `setup()` layer
+underneath every override.
+
+```vim
+autocmd FileType fix let b:fix_lsp_enabled = v:false
+```
+
+```ini
+; .editorconfig
+[*.fix]
+fix_annotate_title_enabled = false
+```
+
+Overridable keys: `annotate.tag.enabled`, `annotate.value.enabled`,
+`annotate.title.enabled`, `annotate.title.position`,
+`annotate.group.path.enabled`, `annotate.group.highlight.enabled`,
+`lsp.enabled`, `lsp.validate.enabled`, `lsp.hover.enabled`, `dictionary`,
+`formatter.tag`, `formatter.value`, `formatter.title`.
+
+Dictionaries and formatters registered under a `name` can be selected from a
+modeline or `.editorconfig` without embedding a path or function in the
+buffer:
+
+```lua
+require("fix").setup({
+  dictionaries = {
+    { path = "xml/custom/binance/spot-fix-oe.xml", mode = "quickfix", name = "binance-oe" },
+  },
+  formatters = {
+    tag = {
+      loud = function(field)
+        return { text = "!" .. (field.tag_text or field.tag), highlight = "WarningMsg" }
+      end,
+    },
+  },
+})
+```
+
+```
+# fix: dictionary=binance-oe, formatter.tag=loud
+```
+
+A modeline is read out of the file you are opening, so it is only as
+trustworthy as that file — see [Security](#security) for what it can and
+cannot do.
+
+`:FIX overrides [show|refresh]` reports a buffer's effective overrides and
+re-resolves them after a `vim.b`/`vim.g` change or a dictionary file edited on
+disk. See `:h fix.nvim-overrides` for the exact modeline grammar.
+
+## Security
+
+A FIX log is data, and fix.nvim treats it as data. Opening one runs no code
+from it: the plugin parses, decodes, and decorates, and it writes to a buffer
+only through an LSP code action you invoke yourself.
+
+[Per-buffer overrides](#per-buffer-overrides) are the one feature that lets a
+file influence the plugin's own behavior, through a `# fix: key=value`
+modeline. Two properties bound what that can do:
+
+- Values are plain text, matched against a fixed whitelist of settings. A key
+  outside it, or a value of the wrong shape, is refused with a warning.
+- `formatter.*` and `dictionary=<name>` resolve strictly by name, against
+  functions and dictionaries you registered through `setup()`. A file can name
+  one of yours; it cannot supply one.
+
+So a modeline can change what you see — hide titles, pick a different one of
+your dictionaries, turn the LSP off — but it cannot execute code, and cannot
+introduce a formatter or dictionary you did not write.
+
+### Dictionary paths from a file
+
+The exception is `dictionary=<path>`, which names a file on your disk rather
+than an entry in your config. It requires `overrides.modeline.allow_paths =
+true` (default `false`), and the gate covers both file-borne layers: the
+modeline and `.editorconfig`, since a `.editorconfig` arrives with someone
+else's repository just as easily as a log does. `vim.b` and `vim.g` are not
+gated — you set those yourself.
+
+The gate is off by default because resolving such a path parses whatever it
+names, synchronously, while the file opens:
+
+- a very large or deeply nested file stalls the editor while it is parsed, and
+  a FIFO blocks it indefinitely;
+- a path under an automount or a network share turns opening a log into a
+  network request;
+- a dictionary shipped alongside the log redefines what tags and enums mean,
+  so a message renders as something other than what it says — the risk that
+  matters most when the log is evidence.
+
+None of these is code execution, and none applies to a named dictionary from
+your own `setup()`. Turn `allow_paths` on when you routinely open ad hoc logs
+whose dictionaries live beside them and whose origin you trust; for a one-off
+path prefer `:FIX dictionary` or `vim.b`/`vim.g`.
+
+To stop reading modelines altogether, set `overrides.modeline.enabled = false`;
+`vim.b`, `.editorconfig`, and `vim.g` keep working.
+
 ## Performance and Internals
 
 fix.nvim renders the viewport first, scans the rest in background batches, and
@@ -138,6 +259,7 @@ cache speeds up later sessions; `:FIX cache clear` resets the current file.
 | `:FIX yank [--reg=<REGISTER>]` | `require("fix").yank(reg)` | Smart yank: current/selected fields for characterwise targets, selected messages for linewise targets |
 | `:FIX lsp toggle` | `require("fix").lsp_toggle()` | Turn the LSP features (diagnostics, fixes, hover) on or off for every FIX buffer |
 | `:FIX cache clear` | `require("fix").cache_clear()` | Clear in-memory and on-disk cache entries for the current file, then re-render |
+| `:FIX overrides [show\|refresh]` | `require("fix").overrides_show()` / `.overrides_refresh()` | Show the current buffer's effective per-buffer overrides, or re-resolve them |
 
 ## Configuration
 
@@ -159,6 +281,7 @@ examples.
     -- ["FIX.4.4"] = {
     --   path = "xml/custom/binance/spot-fix-oe.xml",
     --   mode = "quickfix", -- "auto" | "quickfix" | "repository"
+    --   name = "binance-oe", -- optional: selectable from a per-buffer override
     --   ---@type table<integer, FixTagDecoder>
     --   tags = {
     --     [25035] = function(field, _ctx)
@@ -170,6 +293,15 @@ examples.
     --   },
     -- },
     -- ["FIX.4.2"] = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+  },
+
+  -- Named formatters, selectable from a per-buffer override
+  -- (`# fix: formatter.tag=loud`). The default is an empty table for each
+  -- namespace; "default" is reserved for the built-in formatter.
+  formatters = {
+    tag = {},
+    value = {},
+    title = {},
   },
 
   -- Filetype detection rules passed to vim.filetype.add().
@@ -301,6 +433,16 @@ examples.
       formatter = function(group, field)
         return require("fix.formatters.tree.group").default(group, field)
       end,
+    },
+  },
+
+  -- Per-buffer overrides (see #per-buffer-overrides above).
+  overrides = {
+    modeline = {
+      enabled = true, -- Scan the first 5 lines for a `# fix: key=value, ...` line.
+      -- Allow a literal dictionary path from a modeline/.editorconfig.
+      -- Off by default for security -- see the Security section above.
+      allow_paths = false,
     },
   },
 }

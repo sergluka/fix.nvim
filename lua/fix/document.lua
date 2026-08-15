@@ -1,8 +1,8 @@
 local Cache = require("fix.cache")
 local Consts = require("fix.consts")
-local Dictionary = require("fix.dictionary")
 local Field = require("fix.field")
 local Message = require("fix.message")
+local Overrides = require("fix.overrides")
 
 local M = {}
 local FixTag = Consts.FixTag
@@ -106,9 +106,10 @@ local function fields_from_node(buf, message_node)
     return fields
 end
 
+---@param buf number
 ---@param semantic FixSemantic
-local function decode(semantic)
-    local dict = Dictionary.load(semantic.version)
+local function decode(buf, semantic)
+    local dict = Overrides.dictionary_for(buf, semantic.version)
     if not dict then
         return
     end
@@ -255,7 +256,7 @@ end
 local function semantic_from_node(buf, message_node)
     local fields = fields_from_node(buf, message_node)
     local semantic = { version = resolve_version(fields), fields = fields }
-    decode(semantic)
+    decode(buf, semantic)
     return semantic
 end
 
@@ -276,11 +277,12 @@ local function insert_field(fields, field)
     vim.notify_once("Too many duplicate tags, something is wrong", vim.log.levels.WARN)
 end
 
+---@param buf number
 ---@param semantic FixSemantic
 ---@param lineno number
 ---@param lazy_decode? boolean Decode on field access; for semantics that were not decoded up front.
 ---@return Message
-function M.message_from_semantic(semantic, lineno, lazy_decode)
+function M.message_from_semantic(buf, semantic, lineno, lazy_decode)
     local fields = {}
     local list = lazy_decode and {} or nil
     for _, sf in ipairs(semantic.fields) do
@@ -293,7 +295,7 @@ function M.message_from_semantic(semantic, lineno, lazy_decode)
 
     local decode_field
     if list then
-        local dict = Dictionary.load(semantic.version)
+        local dict = Overrides.dictionary_for(buf, semantic.version)
         if dict then
             local ctx = { version = semantic.version, fields = list, dictionary = dict }
             decode_field = function(field)
@@ -327,6 +329,20 @@ local function message_node_at(buf, lnum, line_text)
     return node, true
 end
 
+--- The single producer of cache keys: namespaces `Cache.key` by the buffer's
+--- content-affecting overrides, so two buffers decoding the same line text
+--- under different overrides never share an entry.
+---@param buf number
+---@param line_text string
+---@return string
+function M.key_for(buf, line_text)
+    local suffix = Overrides.cache_suffix(buf)
+    if suffix then
+        return Cache.key(line_text) .. suffix
+    end
+    return Cache.key(line_text)
+end
+
 --- Build the cheap, always-visible summary message for a line. On a cold
 --- cache its fields are decoded only when the summary formatter accesses
 --- them; repeating groups are constructed when the message node is expanded.
@@ -340,13 +356,13 @@ function M.summary_line(buf, lnum, line_text, key)
     if line_text == nil then
         return nil, "", true
     end
-    key = key or Cache.key(line_text)
+    key = key or M.key_for(buf, line_text)
 
     local semantic = Cache.get_semantic(key)
     if semantic == false then
         return nil, key, true
     elseif semantic ~= nil then
-        return M.message_from_semantic(semantic, lnum), key, true
+        return M.message_from_semantic(buf, semantic, lnum), key, true
     end
 
     local node, covered = message_node_at(buf, lnum, line_text)
@@ -355,7 +371,7 @@ function M.summary_line(buf, lnum, line_text, key)
     end
 
     local fields = fields_from_node(buf, node)
-    return M.message_from_semantic({ version = resolve_version(fields), fields = fields }, lnum, true), key, true
+    return M.message_from_semantic(buf, { version = resolve_version(fields), fields = fields }, lnum, true), key, true
 end
 
 --- Build (or fetch from cache) the message on a line.
@@ -372,7 +388,7 @@ function M.build_line(buf, lnum, line_text, key)
     if line_text == nil then
         return nil, "", true
     end
-    key = key or Cache.key(line_text)
+    key = key or M.key_for(buf, line_text)
 
     local semantic = Cache.get_semantic(key)
     if semantic == nil then
@@ -393,7 +409,7 @@ function M.build_line(buf, lnum, line_text, key)
     if not semantic then
         return nil, key, true
     end
-    return M.message_from_semantic(semantic, lnum), key, true
+    return M.message_from_semantic(buf, semantic, lnum), key, true
 end
 
 -- Cold/whole-buffer path; per-line cache misses are amortized by the render scheduler.

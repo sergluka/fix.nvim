@@ -86,4 +86,164 @@ T["unknown enum returns nil"] = function()
     MiniTest.expect.equality(dict:enum(35, "ZZZZ"), nil)
 end
 
+-- These tests mutate the module-level custom-dictionary registry via
+-- Dictionary.apply(); restore it afterwards so later cases keep seeing
+-- bundled defaults.
+local function with_clean_registry(fn)
+    local saved_custom, saved_names = Dictionary._custom, Dictionary._names
+    local ok, err = pcall(fn)
+    Dictionary._custom, Dictionary._names = saved_custom, saved_names
+    Dictionary.clear_cache()
+    Dictionary._fingerprint = nil
+    if not ok then
+        error(err, 0)
+    end
+end
+
+T["named dictionaries: two names share one FIX version"] = function()
+    with_clean_registry(function()
+        local registries = Dictionary.prepare({
+            {
+                path = "xml/custom/binance/spot-fix-oe.xml",
+                mode = "quickfix",
+                name = "binance-oe",
+                version = "FIX.9.1",
+            },
+            {
+                path = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+                mode = "quickfix",
+                name = "coinbase-oe",
+                version = "FIX.9.1",
+            },
+        })
+        MiniTest.expect.equality(registries.by_version["FIX.9.1"], nil)
+        Dictionary.apply(registries)
+
+        local binance = Dictionary.named("binance-oe")
+        local coinbase = Dictionary.named("coinbase-oe")
+        MiniTest.expect.equality(binance.version, "FIX.9.1")
+        MiniTest.expect.equality(coinbase.version, "FIX.9.1")
+        MiniTest.expect.equality(binance.key ~= coinbase.key, true)
+
+        local binance_dict = Dictionary.load_from(binance)
+        local coinbase_dict = Dictionary.load_from(coinbase)
+        MiniTest.expect.equality(binance_dict:field(25035).name, "MessageHandling")
+        MiniTest.expect.equality(coinbase_dict:field(7928).name, "SelfTradePrevention")
+    end)
+end
+
+T["named dictionaries: name-only entry does not become the default"] = function()
+    with_clean_registry(function()
+        local registries = Dictionary.prepare({
+            "xml/custom/binance/spot-fix-oe.xml",
+            { path = "xml/custom/binance/spot-fix-md.xml", name = "binance-md" },
+        })
+        MiniTest.expect.equality(registries.by_version["FIX.4.4"] ~= nil, true)
+        MiniTest.expect.equality(registries.by_name["binance-md"] ~= nil, true)
+        Dictionary.apply(registries)
+
+        MiniTest.expect.equality(Dictionary.has_version("FIX.4.4"), true)
+        local default_dict = Dictionary.load("FIX.4.4")
+        MiniTest.expect.equality(default_dict:field(11).name, "ClOrdID")
+
+        local named_dict = Dictionary.load_from(Dictionary.named("binance-md"))
+        MiniTest.expect.equality(rawequal(default_dict, named_dict), false)
+        MiniTest.expect.equality(named_dict:field(11), nil)
+    end)
+end
+
+T["named dictionaries: duplicate name errors"] = function()
+    local ok, err = pcall(Dictionary.prepare, {
+        {
+            path = "xml/custom/binance/spot-fix-oe.xml",
+            mode = "quickfix",
+            name = "dup",
+            version = "FIX.9.1",
+        },
+        {
+            path = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+            mode = "quickfix",
+            name = "dup",
+            version = "FIX.9.2",
+        },
+    })
+    MiniTest.expect.equality(ok, false)
+    MiniTest.expect.equality(err:find("duplicate dictionary name", 1, true) ~= nil, true)
+end
+
+T["named dictionaries: name equal to a FIX version string errors"] = function()
+    local ok, err = pcall(Dictionary.prepare, {
+        { path = "xml/custom/binance/spot-fix-oe.xml", mode = "quickfix", name = "FIX.4.4" },
+    })
+    MiniTest.expect.equality(ok, false)
+    MiniTest.expect.equality(err:find("collides with a FIX version", 1, true) ~= nil, true)
+end
+
+T["named dictionaries: name equal to a bundled-only version string errors"] = function()
+    local ok, err = pcall(Dictionary.prepare, {
+        { path = "xml/custom/binance/spot-fix-oe.xml", mode = "quickfix", name = "FIX.5.0SP1" },
+    })
+    MiniTest.expect.equality(ok, false)
+    MiniTest.expect.equality(err:find("collides with a FIX version", 1, true) ~= nil, true)
+end
+
+T["apply: reapplying an identical two-index registry returns false"] = function()
+    with_clean_registry(function()
+        local spec = {
+            "xml/custom/binance/spot-fix-oe.xml",
+            { path = "xml/custom/binance/spot-fix-md.xml", name = "binance-md" },
+        }
+        MiniTest.expect.equality(Dictionary.apply(Dictionary.prepare(spec)), true)
+        MiniTest.expect.equality(Dictionary.apply(Dictionary.prepare(spec)), false)
+    end)
+end
+
+T["apply: a change confined to by_name returns true"] = function()
+    with_clean_registry(function()
+        local base = Dictionary.prepare({
+            {
+                path = "xml/custom/binance/spot-fix-oe.xml",
+                mode = "quickfix",
+                name = "binance-oe",
+                version = "FIX.9.1",
+            },
+        })
+        Dictionary.apply(base)
+
+        local with_extra_name = Dictionary.prepare({
+            {
+                path = "xml/custom/binance/spot-fix-oe.xml",
+                mode = "quickfix",
+                name = "binance-oe",
+                version = "FIX.9.1",
+            },
+            {
+                path = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+                mode = "quickfix",
+                name = "coinbase-oe",
+                version = "FIX.9.1",
+            },
+        })
+        -- by_version is untouched by this change; only by_name gains an entry.
+        MiniTest.expect.equality(vim.deep_equal(base.by_version, with_extra_name.by_version), true)
+        MiniTest.expect.equality(Dictionary.apply(with_extra_name), true)
+    end)
+end
+
+T["apply: a change confined to by_version returns true"] = function()
+    with_clean_registry(function()
+        local base = Dictionary.prepare({
+            ["FIX.9.1"] = { path = "xml/custom/binance/spot-fix-oe.xml", mode = "quickfix" },
+        })
+        Dictionary.apply(base)
+
+        local with_different_default = Dictionary.prepare({
+            ["FIX.9.1"] = { path = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml", mode = "quickfix" },
+        })
+        -- by_name is empty in both; only by_version's default source changes.
+        MiniTest.expect.equality(vim.deep_equal(base.by_name, with_different_default.by_name), true)
+        MiniTest.expect.equality(Dictionary.apply(with_different_default), true)
+    end)
+end
+
 return T

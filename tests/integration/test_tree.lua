@@ -906,16 +906,21 @@ end
 T["configuration"]["rejects invalid formatters"] = function()
     local errors = Helpers.nvim().lua_get([[(function()
         local cases = {
-            { tree = { field = { formatter = "field" } } },
+            { opts = { tree = { field = { formatter = "field" } } }, needle = "tree" },
+            { opts = { formatters = { tag = { custom = "not-a-function" } } }, needle = "formatters.tag.custom" },
+            {
+                opts = { formatters = { value = { default = function() end } } },
+                needle = "formatters.value.default is reserved",
+            },
         }
         local result = {}
-        for _, opts in ipairs(cases) do
-            local ok, err = pcall(require("fix").setup, opts)
-            result[#result + 1] = not ok and err:find("tree", 1, true) ~= nil
+        for _, case in ipairs(cases) do
+            local ok, err = pcall(require("fix").setup, case.opts)
+            result[#result + 1] = not ok and err:find(case.needle, 1, true) ~= nil
         end
         return result
     end)()]])
-    MiniTest.expect.equality(errors, { true })
+    MiniTest.expect.equality(errors, { true, true, true })
 end
 
 return T

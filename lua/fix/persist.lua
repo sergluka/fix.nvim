@@ -1,6 +1,7 @@
 local Cache = require("fix.cache")
 local Dictionary = require("fix.dictionary")
 local Log = require("fix.log")
+local Overrides = require("fix.overrides")
 
 local M = {}
 
@@ -43,7 +44,7 @@ end
 
 ---@param buf number
 function M.load_into_cache(buf)
-    if not enabled() then
+    if not enabled() or Overrides.persist_excluded(buf) then
         return
     end
     local path = M.path_for(buf)
@@ -134,7 +135,7 @@ end
 ---@param keys table<string, boolean>
 ---@param sync boolean|nil  -- sync write for VimLeavePre (async would be lost)
 function M.save(buf, keys, sync)
-    if not enabled() then
+    if not enabled() or Overrides.persist_excluded(buf) then
         return
     end
     local path = M.path_for(buf)

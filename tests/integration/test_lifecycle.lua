@@ -45,7 +45,7 @@ T["ft change from fix to text leaves namespace intact"] = function()
     local before = #H.get_extmarks(nvim())
     MiniTest.expect.equality(before > 0, true)
     nvim().cmd("set filetype=text")
-    -- Documents current behaviour: extmarks survive until the next render trigger.
+    -- Not a guarantee, just what happens today: extmarks survive until the next render trigger.
     MiniTest.expect.equality(#H.get_extmarks(nvim()), before)
 end
 

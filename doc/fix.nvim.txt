@@ -13,10 +13,12 @@ and decorates buffers with virtual text.
     4. Commands.............................|fix.nvim-commands|
     5. Configuration........................|fix.nvim-configuration|
     6. Dictionaries.........................|fix.nvim-dictionaries|
-    7. Keymaps..............................|fix.nvim-keymaps|
-    8. Limitations..........................|fix.nvim-limitations|
-    9. Development..........................|fix.nvim-development|
-   10. Lua API..............................|fix.nvim-api|
+    7. Overrides............................|fix.nvim-overrides|
+    8. Security.............................|fix.nvim-security|
+    9. Keymaps..............................|fix.nvim-keymaps|
+   10. Limitations..........................|fix.nvim-limitations|
+   11. Development..........................|fix.nvim-development|
+   12. Lua API..............................|fix.nvim-api|
 
 
 ==============================================================================
@@ -156,6 +158,25 @@ The `:FIX` command exposes the user-facing plugin actions.
     Drop in-memory and on-disk cache entries for the current file, then
     re-render the buffer.
 
+                                                       *:FIX-overrides*
+`:FIX overrides [show|refresh]`
+    Inspect or re-resolve the current buffer's per-buffer overrides. See
+    |fix.nvim-overrides|.
+
+                                                  *:FIX-overrides-show*
+`:FIX overrides show`
+    Same as the bare `:FIX overrides`: report the winning layer and value for
+    every overridden key in this buffer, plus any modeline/editorconfig parse
+    warnings.
+
+                                               *:FIX-overrides-refresh*
+`:FIX overrides refresh`
+    Re-resolve the buffer's overrides. Needed after a `:let b:fix_... = ...`
+    or `:let g:fix_... = ...` mid-session (`vim.b`/`vim.g` mutation is not
+    itself observable) or after editing an override dictionary's XML file on
+    disk (there is no filesystem watcher). A modeline edit applies live and
+    does not need this.
+
 
 ==============================================================================
 CONFIGURATION                                         *fix.nvim-configuration*
@@ -170,7 +191,17 @@ These are the defaults:
 
       -- Custom dictionaries keyed by BeginString/FIX version.
       -- `tags` can be used with or without `path` to add Lua decoders.
+      -- An entry's `name` makes it selectable from a per-buffer override.
       dictionaries = {},
+
+      -- Named formatters, selectable from a per-buffer override
+      -- (`# fix: formatter.tag=loud`). "default" is reserved for the
+      -- built-in formatter.
+      formatters = {
+        tag = {},
+        value = {},
+        title = {},
+      },
 
       -- Filetype detection rules passed to vim.filetype.add().
       ft = {
@@ -282,6 +313,14 @@ These are the defaults:
           formatter = function(group, field)
             return require("fix.formatters.tree.group").default(group, field)
           end,
+        },
+      },
+
+      -- Per-buffer overrides. See |fix.nvim-overrides|.
+      overrides = {
+        modeline = {
+          enabled = true, -- Scan the first 5 lines for a `# fix: key=value, ...` line.
+          allow_paths = false, -- Allow a literal dictionary path from a modeline/.editorconfig.
         },
       },
     })
@@ -533,6 +572,136 @@ Neovim exits.
 
 
 ==============================================================================
+OVERRIDES                                                 *fix.nvim-overrides*
+
+A whitelisted subset of settings can be overridden per buffer, from four
+layers, strongest first: a modeline, `vim.b`, an applied `.editorconfig`
+property, and `vim.g`. The global `setup()` opts are the base underneath all
+four. A buffer's own override always wins over the |:FIX-annotations| and
+|:FIX-lsp-toggle| runtime toggles, since those two mutate the global
+`setup()` layer that every override sits on top of.
+
+                                                *fix.nvim-overrides-modeline*
+The modeline:
+>
+    # fix: key=value, key=value, ...
+<
+Scanned in the first 5 lines of the buffer; the first matching line wins,
+even when its payload has no `=` at all — that line is then treated as an
+ordinary comment, and the scan stops there without contributing any pairs.
+Pairs are comma-separated `key=value`; a value cannot itself contain a comma
+— use `vim.b` for a value that needs one. Keys use the dotted form, e.g.
+`annotate.title.position=below`. Editing the modeline is observed live: it
+re-resolves the buffer's overrides automatically, after a short debounce.
+
+                                                   *fix.nvim-overrides-vars*
+Two spellings are accepted at the `vim.b` and `vim.g` layers, and the flat
+spelling wins when both are set on the same buffer:
+>
+    vim.b.fix_annotate_title_enabled = false                     " flat
+    vim.b.fix = { annotate = { title = { enabled = false } } }   " nested
+<
+`vim.g` follows the same two spellings and applies to every buffer that has
+no stronger override — a session-wide default. Unlike the modeline, a
+`vim.b`/`vim.g` mutation is not itself observable by fix.nvim: a `:let
+b:fix_... = ...` or `:let g:fix_... = ...` made mid-session needs
+|:FIX-overrides-refresh| to take effect.
+
+                                             *fix.nvim-overrides-whitelist*
+Overridable keys:
+>
+    annotate.tag.enabled              fix_annotate_tag_enabled
+    annotate.value.enabled            fix_annotate_value_enabled
+    annotate.title.enabled            fix_annotate_title_enabled
+    annotate.title.position           fix_annotate_title_position
+    annotate.group.path.enabled       fix_annotate_group_path_enabled
+    annotate.group.highlight.enabled  fix_annotate_group_highlight_enabled
+    lsp.enabled                       fix_lsp_enabled
+    lsp.validate.enabled              fix_lsp_validate_enabled
+    lsp.hover.enabled                 fix_lsp_hover_enabled
+    dictionary                        fix_dictionary
+    formatter.tag                     fix_formatter_tag
+    formatter.value                   fix_formatter_value
+    formatter.title                   fix_formatter_title
+<
+The left column is the modeline key and the `vim.b`/`vim.g` nested-table
+path. The right column is the flat `vim.b`/`vim.g` variable name, which
+doubles as the `.editorconfig` property name.
+
+A modeline is read out of the file being opened, so it is only as trustworthy
+as that file. See |fix.nvim-security| for what it can and cannot do, and for
+the `allow_paths` gate on `dictionary=<path>`.
+
+                                          *fix.nvim-overrides-editorconfig*
+Neovim lowercases every `.editorconfig` property value before fix.nvim ever
+sees it. Boolean and enum values are unaffected (already lowercase in the
+whitelist above), but a mixed-case dictionary or formatter name can never be
+reached through `.editorconfig` — register such a name in lowercase, or
+select it from `vim.b`/`vim.g`/the modeline instead.
+
+A dictionary XML file changed on disk is not picked up automatically; there
+is no filesystem watcher. Run |:FIX-overrides-refresh| after editing it.
+
+See |:FIX-overrides|, |:FIX-overrides-show|, and |:FIX-overrides-refresh| in
+|fix.nvim-commands| for the command that inspects and re-resolves a buffer's
+overrides.
+
+
+==============================================================================
+SECURITY                                                   *fix.nvim-security*
+
+A FIX log is data, and fix.nvim treats it as data. Opening one runs no code
+from it: the plugin parses, decodes, and decorates, and it writes to a buffer
+only through an LSP code action you invoke yourself.
+
+|fix.nvim-overrides| is the one feature that lets a file influence the
+plugin's own settings, through a `# fix: key=value` modeline. Two properties
+bound what that can do:
+
+    - Values are plain text, matched against a fixed whitelist of settings.
+      A key outside it, or a value of the wrong shape, is refused with a
+      warning.
+    - `formatter.*` and `dictionary=<name>` resolve strictly by name, against
+      functions and dictionaries you registered through `setup()`. A file can
+      name one of yours; it cannot supply one.
+
+So a modeline can change what you see — hide titles, pick a different one of
+your dictionaries, turn the LSP off — but it cannot execute code, and cannot
+introduce a formatter or dictionary you did not write.
+
+                                                     *fix.nvim-security-paths*
+The exception is `dictionary=<path>`, which names a file on your disk rather
+than an entry in your config. It requires `overrides.modeline.allow_paths =
+true` (default `false`), and the gate covers both file-borne layers: the
+modeline and `.editorconfig`, since a `.editorconfig` arrives with someone
+else's repository just as easily as a log does. `vim.b` and `vim.g` are not
+gated — you set those yourself.
+
+The gate is off by default because resolving such a path parses whatever it
+names, synchronously, while the file opens:
+
+    - a very large or deeply nested file stalls the editor while it is
+      parsed, and a FIFO blocks it indefinitely;
+    - a path under an automount or a network share turns opening a log into
+      a network request;
+    - a dictionary shipped alongside the log redefines what tags and enums
+      mean, so a message renders as something other than what it says — the
+      risk that matters most when the log is evidence.
+
+None of these is code execution, and none applies to a named dictionary from
+your own `setup()`. Turn `allow_paths` on when you routinely open ad hoc logs
+whose dictionaries live beside them and whose origin you trust; for a one-off
+path prefer `:FIX dictionary` or `vim.b`/`vim.g`.
+
+                                                   *fix.nvim-security-opt-out*
+To stop reading modelines altogether, set `overrides.modeline.enabled =
+false`; `vim.b`, `.editorconfig`, and `vim.g` keep working. `:FIX overrides
+show` (|:FIX-overrides-show|) reports which layer supplied each effective
+setting for the current buffer, and is the quickest way to answer "why is
+this buffer behaving differently".
+
+
+==============================================================================
 KEYMAPS                                                   *fix.nvim-keymaps*
 
 No keymaps are set by default.
@@ -637,6 +806,24 @@ displayed. If the first message title is hidden, use one of these workarounds:
 - Press `<C-b>` after opening the file.
 - Set `annotate.title.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
 
+                                          *fix.nvim-limitations-editorconfig*
+Opening a `.editorconfig` file reports >
+    E5108: ... invalid key: 21
+<
+and its property names lose their highlighting. Nvim's own
+`syntax/editorconfig.vim` passes every registered property name to
+`vim.cmd.syntax{...}`, which caps positional arguments at 20 without saying
+so, and two of those are the command's own — so the file breaks once more
+than 18 properties are registered. Nvim ships 10 and this plugin adds 13 for
+|fix.nvim-overrides|.
+
+Only the highlighting of `.editorconfig` files themselves is affected: FIX
+buffers, the overrides, and everything else keep working. The bug is in
+Nvim's runtime, not in this plugin: see neovim/neovim issue 41314
+https://github.com/neovim/neovim/issues/41314
+If the highlighting matters more to you than `.editorconfig`
+overrides do, remove the `fix_*` property registration in `plugin/fix.lua`.
+
 
 ==============================================================================
 DEVELOPMENT                                             *fix.nvim-development*
@@ -692,6 +879,16 @@ LUA API                                                       *fix.nvim-api*
                                                     *fix.cache_clear()*
 `require("fix").cache_clear()`
     Clear cache data for the current FIX file and re-render the buffer.
+
+                                                  *fix.overrides_show()*
+`require("fix").overrides_show()`
+    Report the current buffer's effective per-buffer overrides and any parse
+    warnings. See |fix.nvim-overrides| and |:FIX-overrides-show|.
+
+                                               *fix.overrides_refresh()*
+`require("fix").overrides_refresh()`
+    Re-resolve the current buffer's per-buffer overrides. See
+    |:FIX-overrides-refresh|.
 
                                                            *fix.yank()*
 `require("fix").yank([register], [selection])`

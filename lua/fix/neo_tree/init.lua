@@ -1,4 +1,3 @@
-local Cache = require("fix.cache")
 local Document = require("fix.document")
 local Items = require("fix.neo_tree.items")
 local Scan = require("fix.scan")
@@ -506,7 +505,7 @@ function M.load_message(state, node)
         return
     end
     local line = vim.api.nvim_buf_get_lines(extra.bufnr, extra.lineno, extra.lineno + 1, false)[1]
-    if not line or Cache.key(line) ~= extra.key then
+    if not line or Document.key_for(extra.bufnr, line) ~= extra.key then
         M.refresh()
         return
     end
@@ -547,7 +546,7 @@ function M.focus_field(state, bufnr, lnum, col)
         if not line or not scan_is_current(state, scan) then
             return false
         end
-        local key = Cache.key(line)
+        local key = Document.key_for(bufnr, line)
         add_summaries(state, scan, { { message = message, key = key, lineno = message.lineno } })
         scan.scanned_ranges = Scan.cover(scan.scanned_ranges, message.lineno, message.lineno + 1)
         message_node = state.tree:get_node(id)

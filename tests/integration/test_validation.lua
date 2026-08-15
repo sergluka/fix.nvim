@@ -312,30 +312,13 @@ T["a title picks up diagnostics that appear after it was drawn"] = function()
     MiniTest.expect.equality(overlay_text(0):find("■", 1, true), nil)
 end
 
---- The stock virtual_text marks the handler placed for our own namespace.
-local function stock_virt_text()
-    return nvim().lua_get([[(function()
-		local client = vim.lsp.get_clients({ bufnr = 0, name = "fix-validate" })[1]
-		local ns = vim.diagnostic.get_namespace(vim.lsp.diagnostic.get_namespace(client.id, false))
-		local virt_text_ns = ns.user_data.virt_text_ns
-		local out = {}
-		if not virt_text_ns then return out end
-		for _, m in ipairs(vim.api.nvim_buf_get_extmarks(0, virt_text_ns, 0, -1, { details = true })) do
-			local parts = {}
-			for _, chunk in ipairs(m[4].virt_text or {}) do parts[#parts + 1] = chunk[1] end
-			out[#out + 1] = { lnum = m[2], text = table.concat(parts) }
-		end
-		return out
-	end)()]])
-end
-
 T["a concealed title suppresses the stock virtual text"] = function()
     nvim().lua([[vim.diagnostic.config({ virtual_text = true })]])
     setup_replace()
     load("bad-both.fix")
 
     MiniTest.expect.equality(#H.get_diagnostics(nvim()), 2)
-    MiniTest.expect.equality(#stock_virt_text(), 0)
+    MiniTest.expect.equality(#H.stock_virt_text(nvim()), 0)
     MiniTest.expect.equality(overlay_text(0):find("■", 1, true) ~= nil, true)
 end
 
@@ -347,7 +330,7 @@ T["replace_front keeps the stock virtual text on the revealed line only"] = func
     nvim().lua([[vim.api.nvim_win_set_cursor(0, { 2, 0 })]])
     H.wait_validated(nvim())
 
-    local marks = stock_virt_text()
+    local marks = H.stock_virt_text(nvim())
     MiniTest.expect.equality(#marks, 1)
     MiniTest.expect.equality(marks[1].lnum, 1)
     -- Narrowed, not replaced: the configured prefix survives.
@@ -361,24 +344,24 @@ T["replace_front does not force virtual text on when it is off"] = function()
 
     nvim().lua([[vim.api.nvim_win_set_cursor(0, { 2, 0 })]])
     H.wait_validated(nvim())
-    MiniTest.expect.equality(#stock_virt_text(), 0)
+    MiniTest.expect.equality(#H.stock_virt_text(nvim()), 0)
 end
 
 T["a visible title leaves the stock virtual text alone"] = function()
     nvim().lua([[vim.diagnostic.config({ virtual_text = true })]])
     load("bad-both.fix")
-    MiniTest.expect.equality(#stock_virt_text() > 0, true)
+    MiniTest.expect.equality(#H.stock_virt_text(nvim()) > 0, true)
 end
 
 T["moving away from a concealed position restores the stock virtual text"] = function()
     nvim().lua([[vim.diagnostic.config({ virtual_text = true })]])
     setup_replace()
     load("bad-both.fix")
-    MiniTest.expect.equality(#stock_virt_text(), 0)
+    MiniTest.expect.equality(#H.stock_virt_text(nvim()), 0)
 
     setup([[{ annotate = { title = { position = "above" } } }]])
     H.wait_validated(nvim())
-    MiniTest.expect.equality(#stock_virt_text() > 0, true)
+    MiniTest.expect.equality(#H.stock_virt_text(nvim()) > 0, true)
 end
 
 T["toggling validation off clears the title diagnostics"] = function()

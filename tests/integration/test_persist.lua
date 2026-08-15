@@ -55,6 +55,116 @@ T["persist"]["second session loads semantics from disk before warm-up"] = functi
     MiniTest.expect.equality(count_ok, true)
 end
 
+-- Path-based, so persist-eligible, and decodes tag 100 unlike every bundled
+-- dictionary: a correct label after restart can only come from the override
+-- being resolved and namespaced right, not from a fallback decode.
+local ROUND_TRIP_DICT_XML = [[
+<fix major='4' type='FIX' servicepack='0' minor='4'>
+ <header>
+  <field name='BeginString' required='Y'/>
+  <field name='BodyLength' required='Y'/>
+  <field name='MsgType' required='Y'/>
+ </header>
+ <trailer>
+  <field name='CheckSum' required='Y'/>
+ </trailer>
+ <fields>
+  <field number='8' name='BeginString' type='STRING'/>
+  <field number='9' name='BodyLength' type='LENGTH'/>
+  <field number='10' name='CheckSum' type='STRING'/>
+  <field number='35' name='MsgType' type='STRING'/>
+  <field number='100' name='RoundTripLabel' type='STRING'/>
+ </fields>
+</fix>
+]]
+
+T["persist"]["round trip with a dictionary override: annotations return correctly on second session"] = function()
+    local nvim = Helpers.nvim()
+    Helpers.enable_inline_annotations(nvim)
+    local dir = nvim.lua_get([[vim.fn.tempname()]])
+    local xml_path = nvim.lua_get([[vim.fn.tempname() .. ".xml"]])
+    local fix_path = dir .. "/msg.fix"
+    nvim.lua(string.format(
+        [[
+        vim.fn.mkdir(%q, "p")
+        vim.fn.writefile(vim.split(%q, "\n", { plain = true }), %q)
+        vim.fn.writefile({ "# fix: dictionary=round-trip-dict", "8=FIX.4.4|9=5|35=D|100=X|10=000|" }, %q)
+        _G._persist_dir = vim.fn.tempname()
+        require("fix").setup({
+            cache = { persist = { dir = _G._persist_dir } },
+            dictionaries = { { path = %q, mode = "quickfix", name = "round-trip-dict" } },
+        })
+        vim.cmd("edit " .. %q)
+    ]],
+        dir,
+        ROUND_TRIP_DICT_XML,
+        xml_path,
+        fix_path,
+        xml_path,
+        fix_path
+    ))
+    Helpers.wait_annotated(nvim, 5000)
+    Helpers.expect_inline_label(nvim, "RoundTripLabel")
+    Helpers.wait_for(nvim, [[#vim.fn.globpath(_G._persist_dir, "*.mpack", false, true) > 0]], 5000)
+    local persist_dir = nvim.lua_get("_G._persist_dir")
+
+    -- Fresh child, same persist dir, same named override dictionary
+    -- registered again from the same path (as a fresh Neovim startup would).
+    local nvim2 = Helpers.new_nvim({ inline_annotations = true })
+    nvim2.lua(string.format(
+        [[
+        require("fix").setup({
+            cache = { persist = { dir = %q } },
+            dictionaries = { { path = %q, mode = "quickfix", name = "round-trip-dict" } },
+        })
+    ]],
+        persist_dir,
+        xml_path
+    ))
+    -- Capture the disk-loaded entry the instant the merge returns, before any
+    -- render can compute the same answer live. A plain post-`:edit` read
+    -- can't attribute the decode to the disk load: for a two-line fixture the
+    -- first render often beats it.
+    nvim2.lua(string.format(
+        [[
+        _G._round_trip_loaded = false
+        _G._round_trip_tag_text = nil
+        local persist = require("fix.persist")
+        local orig = persist.load_into_cache
+        persist.load_into_cache = function(buf)
+            orig(buf)
+            _G._round_trip_loaded = true
+            local line = vim.api.nvim_buf_get_lines(buf, 1, 2, false)[1]
+            if not line then
+                return
+            end
+            local key = require("fix.document").key_for(buf, line)
+            local semantic = require("fix.cache").get_semantic(key)
+            if not semantic then
+                return
+            end
+            for _, field in ipairs(semantic.fields) do
+                if field.tag == 100 then
+                    _G._round_trip_tag_text = field.tag_text
+                end
+            end
+        end
+        vim.cmd("edit " .. %q)
+    ]],
+        fix_path
+    ))
+    local loaded = nvim2.lua_get("_G._round_trip_loaded")
+    local tag_text_from_disk = nvim2.lua_get("_G._round_trip_tag_text")
+
+    Helpers.wait_annotated(nvim2, 5000)
+    local label_ok = Helpers.inline_label_count(nvim2, "RoundTripLabel") > 0
+    nvim2.stop()
+
+    MiniTest.expect.equality(loaded, true)
+    MiniTest.expect.equality(tag_text_from_disk, "RoundTripLabel")
+    MiniTest.expect.equality(label_ok, true)
+end
+
 T["persist"]["enabled=false writes nothing"] = function()
     local nvim = Helpers.nvim()
     nvim.lua([[

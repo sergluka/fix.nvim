@@ -2,7 +2,7 @@
 --- field under the cursor. Consumed only by `fix.validate.lsp`.
 
 local Consts = require("fix.consts")
-local Dictionary = require("fix.dictionary")
+local Overrides = require("fix.overrides")
 
 local M = {}
 
@@ -38,15 +38,16 @@ local function value_line(field, enum_def)
     return line
 end
 
+---@param buf number
 ---@param message Message
 ---@param field Field
 ---@return string|nil markdown nil when the dictionaries know nothing about the tag
-function M.markdown(message, field)
+function M.markdown(buf, message, field)
     if field.tag == nil then
         return nil
     end
 
-    local dict = Dictionary.load(message.version)
+    local dict = Overrides.dictionary_for(buf, message.version)
     local field_def = dict and dict:field(field.tag) or nil
     if not field_def and not field.tag_text then
         return nil

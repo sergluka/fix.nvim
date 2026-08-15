@@ -1,3 +1,4 @@
+local Consts = require("fix.consts")
 local xml2lua = require("xml2lua")
 
 ---@alias FixMessageType integer
@@ -68,6 +69,10 @@ local xml2lua = require("xml2lua")
 ---@alias DictionaryConfig string|DictionaryConfigSpec
 ---@alias DictionaryRegistry table<string, DictionarySource>
 
+---@class DictionaryRegistries
+---@field by_version DictionaryRegistry
+---@field by_name table<string, DictionarySource>
+
 ---@class FixDictionaryModule
 ---@field private _cache? table<string, Dictionary>
 ---@field resolve_version fun(version: string): string
@@ -75,10 +80,14 @@ local xml2lua = require("xml2lua")
 ---@field new fun(fields?: FieldsDef, enums?: table<string, EnumDef>, tags?: table<integer, FixTagDecoder>,
 ---  groups?: table<string, GroupDefsByTag>, messages?: table<string, MessageDef>): Dictionary
 ---@field load fun(version: string): Dictionary?
+---@field load_from fun(source: DictionarySource): Dictionary
 ---@field register fun(config: DictionaryConfig): DictionarySource
----@field prepare fun(dictionaries?: table): DictionaryRegistry
----@field apply fun(registry: DictionaryRegistry): boolean
----@field configure fun(dictionaries?: table): DictionaryRegistry
+---@field named fun(name: string): DictionarySource?
+---@field prepare_source fun(config: DictionaryConfig, explicit_version?: string): DictionarySource
+---@field evict fun(source: DictionarySource)
+---@field prepare fun(dictionaries?: table): DictionaryRegistries
+---@field apply fun(registries: DictionaryRegistries): boolean
+---@field configure fun(dictionaries?: table): DictionaryRegistries
 ---@field clear_cache fun()
 local M = {}
 
@@ -87,6 +96,7 @@ local aliases = {
 }
 
 M._custom = {} ---@type DictionaryRegistry
+M._names = {} ---@type table<string, DictionarySource>
 
 local function module_dir()
     return debug.getinfo(1, "S").source:sub(2):match("(.*/)")
@@ -177,6 +187,17 @@ end
 local function has_bundled_version(version)
     local dir = base_path(version)
     return vim.uv.fs_stat(dir .. "Fields.xml") ~= nil and vim.uv.fs_stat(dir .. "Enums.xml") ~= nil
+end
+
+-- Named sources and FIX versions share one namespace in override resolution,
+-- so a name must not collide with anything resolve_version could produce.
+local function is_version_string(name)
+    for _, version in pairs(Consts.FixVersion) do
+        if version == name then
+            return true
+        end
+    end
+    return has_bundled_version(M.resolve_version(name))
 end
 
 ---@param tags table<integer, FixTagDecoder>|nil
@@ -626,6 +647,23 @@ function M.new(fields, enums, tags, groups, messages)
     return self
 end
 
+---@param source DictionarySource
+---@return Dictionary
+function M.load_from(source)
+    M._cache = M._cache or {}
+    if M._cache[source.key] then
+        return M._cache[source.key]
+    end
+
+    vim.notify("fix.nvim: Loading FIX dictionary for version " .. source.version, vim.log.levels.DEBUG)
+
+    local fields, enums, groups, messages = load_source(source)
+    local dict = M.new(fields, enums, source.tags, groups, messages)
+    M._cache[source.key] = dict
+
+    return dict
+end
+
 ---@param version string
 ---@return Dictionary?
 function M.load(version)
@@ -639,18 +677,20 @@ function M.load(version)
         return nil
     end
 
-    M._cache = M._cache or {}
-    if M._cache[source.key] then
-        return M._cache[source.key]
+    return M.load_from(source)
+end
+
+---@param name string
+---@return DictionarySource?
+function M.named(name)
+    return M._names[name]
+end
+
+---@param source DictionarySource
+function M.evict(source)
+    if M._cache then
+        M._cache[source.key] = nil
     end
-
-    vim.notify("fix.nvim: Loading FIX dictionary for version " .. source.version, vim.log.levels.DEBUG)
-
-    local fields, enums, groups, messages = load_source(source)
-    local dict = M.new(fields, enums, source.tags, groups, messages)
-    M._cache[source.key] = dict
-
-    return dict
 end
 
 local function normalize_path(path)
@@ -840,16 +880,39 @@ local function prepare_source(config, explicit_version)
     return source
 end
 
+M.prepare_source = prepare_source
+
+---@param config DictionaryConfig
+---@return string?
+local function spec_name(config)
+    return type(config) == "table" and config.name or nil
+end
+
 ---@param dictionaries? table
----@return DictionaryRegistry
+---@return DictionaryRegistries
 local function prepare_registry(dictionaries)
+    local by_version = {}
+    local by_name = {}
     if dictionaries == nil then
-        return {}
+        return { by_version = by_version, by_name = by_name }
     end
     vim.validate("dictionaries", dictionaries, "table")
 
-    local registry = {}
     local list_versions = {}
+    local names_seen = {}
+
+    local function register_name(name, source)
+        vim.validate("dictionary.name", name, non_empty_string, "non-empty string")
+        if names_seen[name] then
+            error(string.format("duplicate dictionary name %q", name), 2)
+        end
+        if is_version_string(name) then
+            error(string.format("dictionary name %q collides with a FIX version identifier", name), 2)
+        end
+        names_seen[name] = true
+        by_name[name] = source
+    end
+
     local list_keys = {}
     for key in pairs(dictionaries) do
         if type(key) == "number" then
@@ -859,46 +922,60 @@ local function prepare_registry(dictionaries)
     table.sort(list_keys)
 
     for _, key in ipairs(list_keys) do
-        local source = prepare_source(dictionaries[key])
-        if list_versions[source.version] then
-            error(
-                string.format(
-                    "multiple dictionaries infer %s; use explicit version keys in setup({ dictionaries = ... })",
-                    source.version
-                ),
-                2
-            )
+        local config = dictionaries[key]
+        local name = spec_name(config)
+        local source = prepare_source(config)
+        if name then
+            register_name(name, source)
+        else
+            if list_versions[source.version] then
+                error(
+                    string.format(
+                        "multiple dictionaries infer %s; use explicit version keys in setup({ dictionaries = ... })",
+                        source.version
+                    ),
+                    2
+                )
+            end
+            list_versions[source.version] = true
+            by_version[source.version] = source
         end
-        list_versions[source.version] = true
-        registry[source.version] = source
     end
 
     for version, config in pairs(dictionaries) do
         if type(version) ~= "number" then
             vim.validate("dictionaries key", version, non_empty_string, "non-empty version string")
-            registry[version] = prepare_source(config, version)
+            local source = prepare_source(config, version)
+            by_version[version] = source
+            local name = spec_name(config)
+            if name then
+                register_name(name, source)
+            end
         end
     end
 
-    return registry
+    return { by_version = by_version, by_name = by_name }
 end
 
 ---@param dictionaries? table
----@return DictionaryRegistry
+---@return DictionaryRegistries
 function M.prepare(dictionaries)
-    local ok, registry = pcall(prepare_registry, dictionaries)
+    local ok, registries = pcall(prepare_registry, dictionaries)
     if not ok then
-        error("fix.nvim: " .. tostring(registry), 2)
+        error("fix.nvim: " .. tostring(registries), 2)
     end
-    return registry
+    return registries
 end
 
----@param registry DictionaryRegistry
+---@param registries DictionaryRegistries
 ---@return boolean changed
-function M.apply(registry)
-    registry = registry or {}
-    local changed = not vim.deep_equal(M._custom, registry)
-    M._custom = registry
+function M.apply(registries)
+    registries = registries or {}
+    local by_version = registries.by_version or {}
+    local by_name = registries.by_name or {}
+    local changed = not vim.deep_equal(M._custom, by_version) or not vim.deep_equal(M._names, by_name)
+    M._custom = by_version
+    M._names = by_name
     if changed then
         M.clear_cache()
     end
@@ -907,11 +984,11 @@ function M.apply(registry)
 end
 
 ---@param dictionaries? table
----@return DictionaryRegistry
+---@return DictionaryRegistries
 function M.configure(dictionaries)
-    local registry = M.prepare(dictionaries)
-    M.apply(registry)
-    return registry
+    local registries = M.prepare(dictionaries)
+    M.apply(registries)
+    return registries
 end
 
 ---@param config DictionaryConfig
@@ -941,7 +1018,38 @@ local function fingerprint_part(path, root)
     if root and path:sub(1, #root + 1) == root .. "/" then
         name = path:sub(#root + 2)
     end
-    return string.format("%s:%d:%d", name, stat.mtime.sec, stat.size)
+    return string.format("%s:%d:%d:%d", name, stat.mtime.sec, stat.mtime.nsec, stat.size)
+end
+
+--- mtime/size of every file the source reads, joined and sorted. Shared by
+--- `M.fingerprint()` and `fix.overrides` so the two never disagree on what
+--- "the source's files" means.
+---@param source DictionarySource
+---@return string
+function M.source_fingerprint(source)
+    local paths
+    if source.format == "repository" then
+        paths = {
+            source.fields_path,
+            source.enums_path,
+            source.messages_path,
+            source.msg_contents_path,
+            source.components_path,
+        }
+    else
+        paths = { source.path }
+    end
+    local parts = {}
+    for _, path in ipairs(paths) do
+        if path then
+            local part = fingerprint_part(path)
+            if part then
+                parts[#parts + 1] = part
+            end
+        end
+    end
+    table.sort(parts)
+    return table.concat(parts, ";")
 end
 
 function M.fingerprint()
@@ -963,15 +1071,7 @@ function M.fingerprint()
         if source.tags_fingerprint then
             parts[#parts + 1] = string.format("custom-tags:%s:%s", version, source.tags_fingerprint)
         end
-        if source.format == "repository" then
-            parts[#parts + 1] = fingerprint_part(source.fields_path)
-            parts[#parts + 1] = fingerprint_part(source.enums_path)
-            parts[#parts + 1] = fingerprint_part(source.messages_path)
-            parts[#parts + 1] = fingerprint_part(source.msg_contents_path)
-            parts[#parts + 1] = fingerprint_part(source.components_path)
-        else
-            parts[#parts + 1] = fingerprint_part(source.path)
-        end
+        parts[#parts + 1] = M.source_fingerprint(source)
     end
 
     table.sort(parts)

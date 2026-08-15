@@ -6,6 +6,8 @@
 --- Neovim's LSP client as a workspace edit, so undo, `gra` and any
 --- code-action UI behave as usual.
 
+local Overrides = require("fix.overrides")
+
 local M = {}
 
 local CLIENT_NAME = "fix-validate"
@@ -124,6 +126,12 @@ local function code_actions(params)
         return {}
     end
 
+    -- lsp.enabled=false leaves the in-process client attached, so this must
+    -- gate itself rather than rely on being detached.
+    if not Overrides.effective(buf).lsp.enabled then
+        return {}
+    end
+
     local range = params.range
     local only = params.context and params.context.only
     local actions = {}
@@ -164,12 +172,15 @@ end
 ---@param params lsp.HoverParams
 ---@return lsp.Hover|nil
 local function hover(params)
-    if not require("fix").opts.lsp.hover.enabled then
-        return nil
-    end
     local buf = engine().buf_from_uri(params.textDocument and params.textDocument.uri)
     if not buf then
         return nil -- subsystem detached, e.g. `:FIX lsp toggle` off
+    end
+    -- Same gate as code_actions: lsp.enabled leaves the client attached, so
+    -- hover must check both flags itself rather than rely on detachment.
+    local lsp = Overrides.effective(buf).lsp
+    if not lsp.enabled or not lsp.hover.enabled then
+        return nil
     end
 
     -- utf-8 position encoding: `character` is a byte column.
@@ -179,7 +190,7 @@ local function hover(params)
         return nil
     end
 
-    local value = require("fix.validate.hover").markdown(message, field)
+    local value = require("fix.validate.hover").markdown(buf, message, field)
     if not value then
         return nil
     end

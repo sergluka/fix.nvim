@@ -1,6 +1,6 @@
 local Annotate = require("fix.annotate")
-local Cache = require("fix.cache")
 local Document = require("fix.document")
+local Overrides = require("fix.overrides")
 local Persist = require("fix.persist")
 local Scan = require("fix.scan")
 
@@ -29,9 +29,11 @@ end
 --- keeps its display width and `vim.diagnostic` renders them itself. The
 --- validator reads this to know when to repaint and how to configure its
 --- namespace, so the rule lives here alone.
+---@param buf? number  effective(buf) when given and `title` omitted, else the global opts
+---@param title? table  already-resolved `annotate.title`; skips re-resolving effective(buf)
 ---@return "replace"|"replace_front"|nil
-function M.diagnostics_in_title()
-    local title = opts().annotate.title
+function M.diagnostics_in_title(buf, title)
+    title = title or (buf and Overrides.effective(buf) or opts()).annotate.title
     if not title.enabled then
         return nil
     end
@@ -49,14 +51,14 @@ local function render_lines(buf, srow, erow)
     if not state then
         return
     end
-    local o = opts()
+    local o = Overrides.effective(buf)
     -- The stored table is replaced whenever the validator revalidates a line,
     -- so its identity doubles as the "has this changed" marker in the slot.
-    local validate = M.diagnostics_in_title() and require("fix.validate") or nil
+    local validate = M.diagnostics_in_title(buf, o.annotate.title) and require("fix.validate") or nil
     erow = math.min(erow, vim.api.nvim_buf_line_count(buf))
     for lnum = math.max(srow, 0), erow - 1 do
         local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
-        local key = Cache.key(line)
+        local key = Document.key_for(buf, line)
         local slot = state.rendered[lnum + 1]
         local front = state.revealed[lnum] == true
         local diagnostics = validate and validate.diagnostics_for(buf, lnum) or nil
@@ -90,7 +92,7 @@ local function sync_revealed_lines(buf)
         return
     end
 
-    local o = opts()
+    local o = Overrides.effective(buf)
     local next_revealed = {}
     if o.annotate.title.enabled and o.annotate.title.position == "replace_front" then
         for _, win in ipairs(vim.fn.win_findbuf(buf)) do
@@ -371,6 +373,16 @@ function M.purge(buf)
     state.warm:rewind(0)
     M.refresh_viewport(buf)
     state.warm:resume()
+end
+
+--- Drop the accumulated persisted-key set, e.g. when the buffer's cache
+--- namespace changes mid-session so old-namespace keys stop being written.
+---@param buf number
+function M.reset_keys(buf)
+    local state = states[buf]
+    if state then
+        state.keys = {}
+    end
 end
 
 --- True when warm-up finished and no edits are pending. Used by tests.

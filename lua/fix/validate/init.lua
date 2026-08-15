@@ -7,6 +7,7 @@
 
 local Document = require("fix.document")
 local Lsp = require("fix.validate.lsp")
+local Overrides = require("fix.overrides")
 local Rules = require("fix.validate.rules")
 local Scan = require("fix.scan")
 
@@ -34,17 +35,20 @@ local PUBLISH_THROTTLE_MS = 150
 ---@field dirty boolean
 ---@field touched_first? number  0-based span of lines whose diagnostics changed
 ---@field touched_last? number   since the last publish
+---@field validating boolean     mirrors validating(buf) as of the last sync; edge-detects a mid-session flip
 
 local states = {} ---@type table<number, FixValidateState>
 
-local function opts()
-    return require("fix").opts.lsp
+---@param buf number
+local function opts(buf)
+    return Overrides.effective(buf).lsp
 end
 
 --- Whether the diagnostics side runs; hover only needs the attach itself.
+---@param buf number
 ---@return boolean
-local function validating()
-    return opts().validate.enabled
+local function validating(buf)
+    return opts(buf).validate.enabled
 end
 
 ---@param raw FixRuleDiagnostic
@@ -84,7 +88,7 @@ local function run_rules(buf, lnum, line, message)
         line = line,
         message = message,
         scratch = {},
-        opts = opts().validate,
+        opts = opts(buf).validate,
     }
 
     local diagnostics
@@ -147,7 +151,7 @@ end
 ---@param last? number 0-based inclusive
 local function refresh_titles(buf, first, last)
     local render = package.loaded["fix.render"]
-    if not (render and render.diagnostics_in_title()) then
+    if not (render and render.diagnostics_in_title(buf)) then
         return
     end
     if first then
@@ -181,7 +185,7 @@ end
 
 --- The virtual text `vim.diagnostic` renders itself, narrowed to the lines the
 --- title did not take over. Only our own namespace is touched, so other servers
---- and the global config keep their behaviour.
+--- and the global config are unaffected.
 ---@param namespace number
 ---@param bufnr number
 ---@return vim.diagnostic.Opts.VirtualText|false
@@ -200,6 +204,27 @@ local function current_line_virtual_text(namespace, bufnr)
     return narrowed
 end
 
+--- One client, one namespace, many buffers with different effective title
+--- positions — so the namespace's (global) `virtual_text` is a resolver
+--- deciding per buffer at render time, not a value frozen by the last caller.
+---@param namespace number
+---@param bufnr number
+---@return vim.diagnostic.Opts.VirtualText|false
+local function resolve_virtual_text(namespace, bufnr)
+    local render = package.loaded["fix.render"]
+    local position = render and render.diagnostics_in_title(bufnr)
+    if position == "replace" then
+        return false
+    elseif position == "replace_front" then
+        return current_line_virtual_text(namespace, bufnr)
+    end
+    local configured = vim.diagnostic.config().virtual_text
+    if type(configured) == "function" then
+        return configured(namespace, bufnr)
+    end
+    return configured
+end
+
 --- Where the title carries the diagnostics, the stock virtual text would draw
 --- them a second time — inline, over the very title they were drawn into. Turn
 --- it off, but only for our own namespace. `replace_front` reveals the cursor
@@ -211,21 +236,17 @@ local function configure_virtual_text()
         return
     end
 
-    local render = package.loaded["fix.render"]
-    local position = render and render.diagnostics_in_title()
-    local virtual_text = nil
-    if position == "replace_front" then
-        virtual_text = current_line_virtual_text
-    elseif position then
-        virtual_text = false
-    end
-
-    -- Assigning through the namespace table is the only way to drop the key
-    -- again when the position changes back; vim.diagnostic.config() can only
+    -- Assigning through the namespace table is the only way to drop a key
+    -- again if this ever needs to change; vim.diagnostic.config() can only
     -- add or overwrite. The empty config call re-renders what is on screen.
-    vim.diagnostic.get_namespace(ns).opts.virtual_text = virtual_text
+    vim.diagnostic.get_namespace(ns).opts.virtual_text = resolve_virtual_text
     vim.diagnostic.config({}, ns)
 end
+
+--- Re-consult `resolve_virtual_text` now, for every buffer showing our
+--- diagnostics. A presentation-only override like `annotate.title.position`
+--- changes what it decides without a publish, and nothing else re-renders.
+M.refresh_virtual_text = configure_virtual_text
 
 ---@param buf number
 local function publish_now(buf)
@@ -351,15 +372,15 @@ local function schedule_debounced(buf)
         state.dirty = false
         -- Publish what splice already invalidated; the walk fills the rest in.
         publish_soon(buf)
-        if validating() then
+        if validating(buf) then
             state.walk:resume()
         end
-    end, opts().validate.debounce_ms)
+    end, opts(buf).validate.debounce_ms)
 end
 
 ---@param buf number
 function M.attach(buf)
-    if states[buf] or not opts().enabled then
+    if states[buf] or not opts(buf).enabled then
         return
     end
 
@@ -374,6 +395,7 @@ function M.attach(buf)
         entries = {},
         line_count = vim.api.nvim_buf_line_count(buf),
         dirty = false,
+        validating = validating(buf),
     }
     state.walk = validate_walk(buf, state)
     states[buf] = state
@@ -418,7 +440,7 @@ function M.attach(buf)
     -- buffer synchronously on the walk's first batch.
     parser:parse(true, function()
         vim.schedule(function()
-            if vim.api.nvim_buf_is_valid(buf) and states[buf] == state and validating() then
+            if vim.api.nvim_buf_is_valid(buf) and states[buf] == state and validating(buf) then
                 state.walk:resume()
             end
         end)
@@ -449,16 +471,8 @@ function M.revalidate(buf)
     end
     state.entries = {}
     state.walk:rewind(0)
-    if validating() then
+    if validating(buf) then
         state.walk:resume()
-    end
-end
-
-local function attach_all()
-    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-        if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == "fix" then
-            M.attach(buf)
-        end
     end
 end
 
@@ -468,22 +482,55 @@ local function detach_all()
     end
 end
 
---- Drop every buffer's state and start over — for option changes at re-setup.
-function M.reattach_all()
-    detach_all()
-    if opts().enabled then
-        attach_all()
+--- Attach or detach one buffer by its own effective `lsp.enabled`, never the
+--- global flag alone — a modeline can enable the LSP where setup() disables
+--- it. Also reconciles a mid-session `lsp.validate.enabled` flip, which never
+--- goes through attach/detach, so nothing else clears stale diagnostics or
+--- restarts the walk.
+---@param buf number
+function M.sync(buf)
+    if not opts(buf).enabled then
+        M.detach(buf)
+        return
+    end
+
+    local state = states[buf]
+    if not state then
+        M.attach(buf)
+        return
+    end
+
+    local should_validate = validating(buf)
+    if should_validate == state.validating then
+        return
+    end
+    state.validating = should_validate
+
+    if should_validate then
+        M.revalidate(buf)
+    else
+        state.walk:cancel() -- a walk mid-tick would otherwise repopulate entries right after
+        state.entries = {}
+        state.touched_first, state.touched_last = nil, nil
+        Lsp.publish(buf, {})
+        refresh_titles(buf)
     end
 end
 
---- Attach or detach every FIX buffer; the flag itself is owned by fix/init.lua.
----@param value boolean
-function M.set_enabled(value)
-    if value then
-        attach_all()
-    else
-        detach_all()
+--- `M.sync` over every FIX buffer; the global flag itself is owned by
+--- fix/init.lua.
+function M.sync_all()
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+        if vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].filetype == "fix" then
+            M.sync(buf)
+        end
     end
+end
+
+--- Drop every buffer's state and start over — for option changes at re-setup.
+function M.reattach_all()
+    detach_all()
+    M.sync_all()
 end
 
 --- Add or replace a rule at runtime, then revalidate every attached buffer.
@@ -503,10 +550,10 @@ end
 function M.is_idle(buf)
     local state = states[buf]
     if not state then
-        return not opts().enabled
+        return not opts(buf).enabled
     end
     -- With validation off the walk never runs; the attach alone is idle.
-    return (state.walk.done or not validating())
+    return (state.walk.done or not validating(buf))
         and not state.dirty
         and state.debounce_timer == nil
         and state.publish_timer == nil
@@ -517,7 +564,7 @@ end
 ---@param lnum number 0-based
 ---@return FixDiagnostic[]|nil diagnostics, FixRuleCtx|nil ctx
 function M.refresh_line(buf, lnum)
-    if not validating() then
+    if not validating(buf) then
         return nil, nil
     end
     local diagnostics, ctx, authoritative = validate_line(buf, lnum)

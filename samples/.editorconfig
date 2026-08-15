@@ -1,0 +1,13 @@
+[*.fix]
+fix_annotate_tag_enabled = false
+fix_annotate_value_enabled = false
+fix_annotate_title_enabled = true
+fix_annotate_title_position = above
+fix_annotate_group_path_enabled = true
+fix_annotate_group_highlight_enabled = true
+fix_lsp_enabled = true
+fix_lsp_validate_enabled = true
+fix_lsp_hover_enabled = true
+fix_formatter_tag = default
+fix_formatter_value = default
+fix_formatter_title = default

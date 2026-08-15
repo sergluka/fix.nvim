@@ -585,6 +585,27 @@ T["setup dictionaries rejects pathless custom tags without version"] = function(
     )
 end
 
+T["resolve_formatter resolves default, named, and unknown formatters"] = function()
+    local result = nvim().lua_get([[(function()
+        require("fix").setup({
+            formatters = {
+                tag = {
+                    loud = function(field)
+                        return { "!" .. tostring(field.tag), "Comment" }
+                    end,
+                },
+            },
+        })
+        local fix = require("fix")
+        return {
+            default_is_builtin = fix.resolve_formatter("tag", "default") == require("fix.formatters.tag").default,
+            named_is_registered = fix.resolve_formatter("tag", "loud") ~= nil,
+            unknown_is_nil = fix.resolve_formatter("tag", "missing") == nil,
+        }
+    end)()]])
+    MiniTest.expect.equality(result, { default_is_builtin = true, named_is_registered = true, unknown_is_nil = true })
+end
+
 T["FIX picker dispatches to fix.snacks.open"] = function()
     MiniTest.expect.equality(H.get_picker_opens(nvim()), 0)
     nvim().cmd("FIX picker")
