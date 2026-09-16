@@ -13,6 +13,11 @@ Neovim plugin for viewing FIX protocol messages. Runtime dependencies: `xml2lua`
 - Format: `stylua --check .` (pinned to stylua 2.3.0 — match locally; CI enforces this exact version).
 - CI (`.github/workflows/ci.yml`) runs `stylua --check .` + `luacheck` on host and the Podman integration suite on every push/PR.
 
+## Project skills
+
+- Before creating, replacing, or refreshing a screenshot, read `.agents/skills/screenshots/SKILL.md` and the
+  references it selects. That directory is the canonical copy; do not create a duplicate under `.claude/skills`.
+
 ## Architecture
 
 The plugin decorates FIX-message buffers with extmark-based virtual text; it does not modify the buffer. Data flows in one direction per render: `FileType/BufWinEnter → render.attach; on_lines → render (debounce/warm-up) → cache → document.build_line → annotate.apply → extmarks`.
