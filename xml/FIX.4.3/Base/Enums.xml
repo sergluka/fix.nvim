@@ -1,21 +1,5 @@
-<?xml version="1.0" encoding="UTF-8"?><!--
-DISCLAIMER
-
-THE INFORMATION CONTAINED HEREIN AND THE FINANCIAL INFORMATION EXCHANGE PROTOCOL (COLLECTIVELY, THE "FIX PROTOCOL") ARE PROVIDED "AS IS" AND NO PERSON OR ENTITY ASSOCIATED WITH THE FIX PROTOCOL MAKES ANY REPRESENTATION OR WARRANTY, EXPRESS OR IMPLIED, AS TO THE FIX PROTOCOL (OR THE RESULTS TO BE OBTAINED BY THE USE THEREOF) OR ANY OTHER MATTER AND EACH SUCH PERSON AND ENTITY SPECIFICALLY DISCLAIMS ANY WARRANTY OF ORIGINALITY, ACCURACY, COMPLETENESS, MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE. SUCH PERSONS AND ENTITIES DO NOT WARRANT THAT THE FIX PROTOCOL WILL CONFORM TO ANY DESCRIPTION THEREOF OR BE FREE OF ERRORS. THE ENTIRE RISK OF ANY USE OF THE FIX PROTOCOL IS ASSUMED BY THE USER.
-
-NO PERSON OR ENTITY ASSOCIATED WITH THE FIX PROTOCOL SHALL HAVE ANY LIABILITY FOR DAMAGES OF ANY KIND ARISING IN ANY MANNER OUT OF OR IN CONNECTION WITH ANY USER'S USE OF (OR ANY INABILITY TO USE) THE FIX PROTOCOL, WHETHER DIRECT, INDIRECT, INCIDENTAL, SPECIAL OR CONSEQUENTIAL (INCLUDING, WITHOUT LIMITATION, LOSS OF DATA, LOSS OF USE, CLAIMS OF THIRD PARTIES OR LOST PROFITS OR REVENUES OR OTHER ECONOMIC LOSS), WHETHER IN TORT (INCLUDING NEGLIGENCE AND STRICT LIABILITY), CONTRACT OR OTHERWISE, WHETHER OR NOT ANY SUCH PERSON OR ENTITY HAS BEEN ADVISED OF, OR OTHERWISE MIGHT HAVE ANTICIPATED THE POSSIBILITY OF, SUCH DAMAGES.
-
-No proprietary or ownership interest of any kind is granted with respect to the FIX Protocol (or any rights therein).
-
-Copyright 2003-2009 FIX Protocol Limited, all rights reserved
-
-REPRODUCTION
-
-FIX Protocol Limited grants permission to print in hard copy form or reproduce the FIX Protocol specification in its entirety provided that the duplicated pages retain the "Copyright FIX Protocol Limited" statement at the bottom of the page.
-
-Portions of the FIX Protocol specification may be extracted or cited in other documents (such as a document which describes one's implementation of the FIX Protocol) provided that one reference the origin of the FIX Protocol specification (HTUhttp://www.fixprotocol.orgUTH) and that the specification itself is "Copyright FIX Protocol Limited".
-FIX Protocol Limited claims no intellectual property over one's implementation (programming code) of an application which implements the behavior and details from the FIX Protocol specification. 	
---><Enums xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" copyright="Copyright (c) FIX Protocol Ltd. All Rights Reserved." edition="2010" version="FIX.4.3" xsi:noNamespaceSchemaLocation="../../schema/Enums.xsd">
+<?xml version="1.0" encoding="utf-8"?>
+<Enums xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" copyright="Copyright (c) FIX Protocol Ltd. All Rights Reserved." edition="2010" version="FIX.4.3" xsi:noNamespaceSchemaLocation="../../schema/Enums.xsd">
   <Enum added="FIX.2.7">
     <Tag>4</Tag>
     <Value>B</Value>
@@ -518,476 +502,476 @@ FIX Protocol Limited claims no intellectual property over one's implementation (
     <Tag>35</Tag>
     <Value>0</Value>
     <SymbolicName>Heartbeat</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Heartbeat</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>1</Value>
     <SymbolicName>TestRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Test Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>2</Value>
     <SymbolicName>ResendRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Resend Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>3</Value>
     <SymbolicName>Reject</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Reject</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>4</Value>
     <SymbolicName>SequenceReset</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Sequence Reset</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>5</Value>
     <SymbolicName>Logout</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Logout</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>6</Value>
     <SymbolicName>IOI</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Indication of Interest</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>7</Value>
     <SymbolicName>Advertisement</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Advertisement</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>8</Value>
     <SymbolicName>ExecutionReport</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Execution Report</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>9</Value>
     <SymbolicName>OrderCancelReject</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Cancel Reject</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>a</Value>
     <SymbolicName>QuoteStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote Status Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>A</Value>
     <SymbolicName>Logon</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Logon</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AA</Value>
     <SymbolicName>DerivativeSecurityList</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Derivative Security List</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AB</Value>
     <SymbolicName>NewOrderMultileg</SymbolicName>
-    <Group/>
+    <Group />
     <Description>New Order - Multileg</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AC</Value>
     <SymbolicName>MultilegOrderCancelReplace</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Multileg Order Cancel/Replace (a.k.a. Multileg Order Modification Request)</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AD</Value>
     <SymbolicName>TradeCaptureReportRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Trade Capture Report Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AE</Value>
     <SymbolicName>TradeCaptureReport</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Trade Capture Report</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AF</Value>
     <SymbolicName>OrderMassStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Mass Status Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AG</Value>
     <SymbolicName>QuoteRequestReject</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote Request Reject</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AH</Value>
     <SymbolicName>RFQRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>RFQ Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>AI</Value>
     <SymbolicName>QuoteStatusReport</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote Status Report</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>b</Value>
     <SymbolicName>MassQuoteAcknowledgement</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Mass Quote Acknowledgement</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>B</Value>
     <SymbolicName>News</SymbolicName>
-    <Group/>
+    <Group />
     <Description>News</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>c</Value>
     <SymbolicName>SecurityDefinitionRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Definition Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>C</Value>
     <SymbolicName>Email</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Email</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>d</Value>
     <SymbolicName>SecurityDefinition</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Definition</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>D</Value>
     <SymbolicName>NewOrderSingle</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Single</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>e</Value>
     <SymbolicName>SecurityStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Status Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>E</Value>
     <SymbolicName>NewOrderList</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order List</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>f</Value>
     <SymbolicName>SecurityStatus</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Status</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>F</Value>
     <SymbolicName>OrderCancelRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Cancel Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>G</Value>
     <SymbolicName>OrderCancelReplaceRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Cancel/Replace Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>g</Value>
     <SymbolicName>TradingSessionStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Trading Session Status Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>h</Value>
     <SymbolicName>TradingSessionStatus</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Trading Session Status</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>H</Value>
     <SymbolicName>OrderStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Status Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>i</Value>
     <SymbolicName>MassQuote</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Mass Quote</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>j</Value>
     <SymbolicName>BusinessMessageReject</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Business Message Reject</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>J</Value>
     <SymbolicName>AllocationInstruction</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Allocation</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>K</Value>
     <SymbolicName>ListCancelRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>List Cancel Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>k</Value>
     <SymbolicName>BidRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Bid Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>l</Value>
     <SymbolicName>BidResponse</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Bid Response (lowercase L)</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>L</Value>
     <SymbolicName>ListExecute</SymbolicName>
-    <Group/>
+    <Group />
     <Description>List Execute</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>m</Value>
     <SymbolicName>ListStrikePrice</SymbolicName>
-    <Group/>
+    <Group />
     <Description>List Strike Price</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>M</Value>
     <SymbolicName>ListStatusRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>List Status Request</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>N</Value>
     <SymbolicName>ListStatus</SymbolicName>
-    <Group/>
+    <Group />
     <Description>List Status</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>n</Value>
     <SymbolicName>XMLNonFIX</SymbolicName>
-    <Group/>
+    <Group />
     <Description>XML message (e.g. non-FIX MsgType)</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>o</Value>
     <SymbolicName>RegistrationInstructions</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Registration Instructions</Description>
   </Enum>
   <Enum added="FIX.2.7">
     <Tag>35</Tag>
     <Value>P</Value>
     <SymbolicName>AllocationInstructionAck</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Allocation ACK</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>p</Value>
     <SymbolicName>RegistrationInstructionsResponse</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Registration Instructions Response</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>q</Value>
     <SymbolicName>OrderMassCancelRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Mass Cancel Request</Description>
   </Enum>
   <Enum added="FIX.4.0">
     <Tag>35</Tag>
     <Value>Q</Value>
     <SymbolicName>DontKnowTrade</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Dont Know Trade (DK)</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>r</Value>
     <SymbolicName>OrderMassCancelReport</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Order Mass Cancel Report</Description>
   </Enum>
   <Enum added="FIX.4.0">
     <Tag>35</Tag>
     <Value>R</Value>
     <SymbolicName>QuoteRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>s</Value>
     <SymbolicName>NewOrderCross</SymbolicName>
-    <Group/>
+    <Group />
     <Description>New Order - Cross</Description>
   </Enum>
   <Enum added="FIX.4.0">
     <Tag>35</Tag>
     <Value>S</Value>
     <SymbolicName>Quote</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>t</Value>
     <SymbolicName>CrossOrderCancelReplaceRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Cross Order Cancel/Replace Request (a.k.a. Cross Order Modification Request)</Description>
   </Enum>
   <Enum added="FIX.4.1">
     <Tag>35</Tag>
     <Value>T</Value>
     <SymbolicName>SettlementInstructions</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Settlement Instructions</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>u</Value>
     <SymbolicName>CrossOrderCancelRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Cross Order Cancel Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>v</Value>
     <SymbolicName>SecurityTypeRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Type Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>V</Value>
     <SymbolicName>MarketDataRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Market Data Request</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>w</Value>
     <SymbolicName>SecurityTypes</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security Types</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>W</Value>
     <SymbolicName>MarketDataSnapshotFullRefresh</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Market Data-Snapshot/Full Refresh</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>x</Value>
     <SymbolicName>SecurityListRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security List Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>X</Value>
     <SymbolicName>MarketDataIncrementalRefresh</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Market Data-Incremental Refresh</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>y</Value>
     <SymbolicName>SecurityList</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Security List</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>Y</Value>
     <SymbolicName>MarketDataRequestReject</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Market Data Request Reject</Description>
   </Enum>
   <Enum added="FIX.4.3">
     <Tag>35</Tag>
     <Value>z</Value>
     <SymbolicName>DerivativeSecurityListRequest</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Derivative Security List Request</Description>
   </Enum>
   <Enum added="FIX.4.2">
     <Tag>35</Tag>
     <Value>Z</Value>
     <SymbolicName>QuoteCancel</SymbolicName>
-    <Group/>
+    <Group />
     <Description>Quote Cancel</Description>
   </Enum>
   <Enum added="FIX.2.7">

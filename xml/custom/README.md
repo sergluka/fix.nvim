@@ -1,11 +1,11 @@
-Custom FIX dictionaries used by integration tests.
+# Synthetic QuickFIX dictionaries
 
-Sources:
+These dictionaries were copied from the public
+[`sergluka/fix-lsp`](https://github.com/sergluka/fix-lsp/tree/07a65defeb33bb1ead1628bab890234ba66ed1c3/xml/custom/synthetic)
+repository at commit `07a65defeb33bb1ead1628bab890234ba66ed1c3`. They
+contain no third-party or venue-specific data and exercise generic QuickFIX XML
+shapes using public FIX fields and fictional custom fields. They are covered by
+Apache-2.0, like the rest of the project.
 
-- `coinbase/`: Coinbase Exchange FIX dictionary archive
-  `cb_exch_fix_dictionaries-20260612.zip` from
-  https://docs.cdp.coinbase.com/exchange/fix-api/dictionary-downloads
-- `binance/`: Binance Spot FIX QuickFIX schemas linked from
-  https://developers.binance.com/docs/binance-spot-api-docs/fix-api
-
-See `THIRD_PARTY_LICENSES.txt` for terms/provenance links.
+Third-party venue dictionaries are deliberately not vendored. Download them
+directly from their publishers for local testing when their terms permit it.

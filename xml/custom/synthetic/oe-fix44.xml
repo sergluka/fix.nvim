@@ -1,0 +1,78 @@
+<!-- Synthetic QuickFIX dictionary written for fix-lsp's tests (Apache-2.0, like
+     the rest of the repository). Shapes exercised: header/trailer sections,
+     a non-repeating component referenced from messages, a group declared
+     directly in a message with a nested group, custom high-numbered tags. -->
+<fix major='4' type='FIX' servicepack='0' minor='4'>
+ <header>
+  <field name='BeginString' required='Y'/>
+  <field name='MsgType' required='Y'/>
+ </header>
+ <trailer>
+  <field name='CheckSum' required='Y'/>
+ </trailer>
+ <messages>
+  <message name='Heartbeat' msgcat='admin' msgtype='0'>
+   <field name='TestReqID' required='N'/>
+  </message>
+  <message name='NewOrderSingle' msgcat='app' msgtype='D'>
+   <field name='ClOrdID' required='Y'/>
+   <component name='Instrument' required='Y'/>
+   <group name='NoPartyIDs' required='N'>
+    <field name='PartyID' required='Y'/>
+    <field name='PartyRole' required='N'/>
+    <group name='NoPartySubIDs' required='N'>
+     <field name='PartySubID' required='Y'/>
+    </group>
+   </group>
+   <field name='Side' required='Y'/>
+   <field name='OrdType' required='Y'/>
+   <field name='SyntheticMode' required='N'/>
+  </message>
+  <message name='ExecutionReport' msgcat='app' msgtype='8'>
+   <field name='OrderID' required='Y'/>
+   <component name='Instrument' required='Y'/>
+   <field name='ExecType' required='Y'/>
+  </message>
+ </messages>
+ <components>
+  <component name='Instrument'>
+   <field name='Symbol' required='Y'/>
+   <field name='SecurityType' required='N'/>
+  </component>
+ </components>
+ <fields>
+  <field number='8' name='BeginString' type='STRING'/>
+  <field number='10' name='CheckSum' type='STRING'/>
+  <field number='11' name='ClOrdID' type='STRING'/>
+  <field number='35' name='MsgType' type='STRING'>
+   <value enum='0' description='HEARTBEAT'/>
+   <value enum='D' description='NEWORDERSINGLE'/>
+   <value enum='8' description='EXECUTIONREPORT'/>
+  </field>
+  <field number='37' name='OrderID' type='STRING'/>
+  <field number='40' name='OrdType' type='CHAR'>
+   <value enum='1' description='MARKET'/>
+   <value enum='2' description='LIMIT'/>
+  </field>
+  <field number='54' name='Side' type='CHAR'>
+   <value enum='1' description='BUY'/>
+   <value enum='2' description='SELL'/>
+  </field>
+  <field number='55' name='Symbol' type='STRING'/>
+  <field number='112' name='TestReqID' type='STRING'/>
+  <field number='150' name='ExecType' type='CHAR'>
+   <value enum='0' description='NEW'/>
+   <value enum='F' description='TRADE'/>
+  </field>
+  <field number='167' name='SecurityType' type='STRING'/>
+  <field number='448' name='PartyID' type='STRING'/>
+  <field number='452' name='PartyRole' type='INT'/>
+  <field number='453' name='NoPartyIDs' type='NUMINGROUP'/>
+  <field number='523' name='PartySubID' type='STRING'/>
+  <field number='802' name='NoPartySubIDs' type='NUMINGROUP'/>
+  <field number='50001' name='SyntheticMode' type='INT'>
+   <value enum='1' description='MODE_ALPHA'/>
+   <value enum='2' description='MODE_BETA'/>
+  </field>
+ </fields>
+</fix>

@@ -1,0 +1,23 @@
+<!-- Synthetic QuickFIX dictionary written for fix-lsp's tests (Apache-2.0).
+     Older generator conventions: capitalised section names, `tag=` instead of
+     `number=`, `value=`/`name=` on enum values, no servicepack attribute. -->
+<FIX major='4' minor='2'>
+ <Header>
+  <Field name='BeginString' required='Y'/>
+ </Header>
+ <Messages>
+  <Message name='NewOrderSingle' msgcat='app' msgtype='D'>
+   <Field name='ClOrdID' required='Y'/>
+   <Field name='Side' required='Y'/>
+  </Message>
+ </Messages>
+ <Fields>
+  <Field tag='8' name='BeginString' type='STRING'/>
+  <Field tag='11' name='ClOrdID' type='STRING'/>
+  <Field tag='35' name='MsgType' type='STRING'/>
+  <Field tag='54' name='Side' type='CHAR'>
+   <Value value='1' name='BUY'/>
+   <Value value='2' name='SELL'/>
+  </Field>
+ </Fields>
+</FIX>
