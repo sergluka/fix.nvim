@@ -484,21 +484,21 @@ T["hover on an enum field shows name, type, description and value"] = function()
     local hover = H.hover(nvim(), 1, col)
 
     MiniTest.expect.no_equality(hover, nil)
-    for _, needle in ipairs({ "**Side** (54)", "char", "Side of order", "**Buy**", "/4.4/tagNum_54" }) do
+    for _, needle in ipairs({ "**Side** (54)", "CHAR", "Side of order", "**BUY**", "/4.4/tagNum_54" }) do
         expect_contains(hover.value, needle)
     end
     MiniTest.expect.equality(hover.range.start, { line = 1, character = col })
     MiniTest.expect.equality(hover.range["end"], { line = 1, character = col + #"54=1" })
 end
 
-T["hover on MsgType adds the message description from Messages.xml"] = function()
+T["hover on MsgType adds the bundled message description"] = function()
     load("valid.fix")
     local hover = H.hover(nvim(), 1, col_of(1, "35="))
 
     MiniTest.expect.no_equality(hover, nil)
     expect_contains(hover.value, "NewOrderSingle")
-    -- This phrase exists only in Messages.xml, not in the tag-35 enum table.
-    expect_contains(hover.value, "electronically submit securities")
+    -- This phrase comes from Orchestra metadata, not the tag-35 enum table.
+    expect_contains(hover.value, "electronically place orders")
     expect_contains(hover.value, "*Category: SingleGeneralOrderHandling*")
 end
 

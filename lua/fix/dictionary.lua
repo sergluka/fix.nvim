@@ -56,6 +56,7 @@ local xml2lua = require("xml2lua")
 ---@field messages_path? string
 ---@field msg_contents_path? string
 ---@field components_path? string
+---@field metadata_path? string
 ---@field tags? table<integer, FixTagDecoder>
 ---@field tags_fingerprint? string
 
@@ -106,8 +107,28 @@ local function repo_root()
     return (vim.fn.fnamemodify(module_dir() .. "../..", ":p"):gsub("/$", ""))
 end
 
-local function base_path(version)
-    return vim.fn.fnamemodify(module_dir() .. "../../xml/" .. version .. "/Base/", ":p")
+local bundled_files = {
+    ["FIX.4.0"] = "FIX40.xml",
+    ["FIX.4.1"] = "FIX41.xml",
+    ["FIX.4.2"] = "FIX42.xml",
+    ["FIX.4.3"] = "FIX43.xml",
+    ["FIX.4.4"] = "FIX44.xml",
+    ["FIX.5.0"] = "FIX50.xml",
+    ["FIX.5.0SP1"] = "FIX50SP1.xml",
+    ["FIX.5.0SP2"] = "FIX50SP2.xml",
+    ["FIXT.1.1"] = "FIXT11.xml",
+}
+
+local function bundled_path(version)
+    local file = bundled_files[version]
+    if not file then
+        return nil
+    end
+    return vim.fn.fnamemodify(module_dir() .. "../../xml/standard/" .. file, ":p")
+end
+
+local function bundled_metadata_path()
+    return vim.fn.fnamemodify(module_dir() .. "../../xml/standard/FIXLatest-metadata.xml", ":p")
 end
 
 local function as_list(value)
@@ -185,8 +206,8 @@ function M.resolve_version(version)
 end
 
 local function has_bundled_version(version)
-    local dir = base_path(version)
-    return vim.uv.fs_stat(dir .. "Fields.xml") ~= nil and vim.uv.fs_stat(dir .. "Enums.xml") ~= nil
+    local path = bundled_path(version)
+    return path ~= nil and vim.uv.fs_stat(path) ~= nil
 end
 
 -- Named sources and FIX versions share one namespace in override resolution,
@@ -225,7 +246,7 @@ local function bundled_source(version, tags, tags_fingerprint)
         return nil
     end
 
-    local dir = base_path(resolved)
+    local path = bundled_path(resolved)
     local key = "bundled:" .. resolved
     local source_version = resolved
     if tags then
@@ -236,13 +257,9 @@ local function bundled_source(version, tags, tags_fingerprint)
     return {
         key = key,
         version = source_version,
-        format = "repository",
-        path = dir,
-        fields_path = dir .. "Fields.xml",
-        enums_path = dir .. "Enums.xml",
-        messages_path = dir .. "Messages.xml",
-        msg_contents_path = dir .. "MsgContents.xml",
-        components_path = dir .. "Components.xml",
+        format = "quickfix",
+        path = path,
+        metadata_path = bundled_metadata_path(),
         tags = tags,
         tags_fingerprint = tags_fingerprint,
     }
@@ -288,6 +305,77 @@ local function parse_file(path)
     return handler.root
 end
 
+local function parse_dom(path)
+    local xml = xml2lua.loadFile(path)
+
+    local handler = require("xmlhandler.dom"):new()
+    local parser = xml2lua.parser(handler)
+    parser:parse(xml)
+
+    return handler.root
+end
+
+local function dom_elements(node, name)
+    local elements = {}
+    for _, child in ipairs(node and node._children or {}) do
+        if child._type == "ELEMENT" and (name == nil or child._name:lower() == name) then
+            elements[#elements + 1] = child
+        end
+    end
+    return elements
+end
+
+local function dom_element(node, name)
+    for _, child in ipairs(node and node._children or {}) do
+        if child._type == "ELEMENT" and child._name:lower() == name then
+            return child
+        end
+    end
+end
+
+local metadata_cache = {}
+
+local function load_metadata(path)
+    if not path then
+        return nil
+    end
+    if metadata_cache[path] then
+        return metadata_cache[path]
+    end
+
+    local xml = parse_file(path).metadata
+    local metadata = { fields = {}, enums = {}, messages = {} }
+    for _, field in ipairs(as_list(xml.fields.field)) do
+        local tag = tonumber(attr(field, "id"))
+        if tag then
+            metadata.fields[tag] = {
+                description = attr(field, "description"),
+            }
+        end
+    end
+    for _, enum in ipairs(as_list(xml.enums.enum)) do
+        local tag = attr(enum, "tag")
+        local value = attr(enum, "value")
+        if tag and value then
+            metadata.enums[tag .. ":" .. value] = {
+                description = attr(enum, "description"),
+            }
+        end
+    end
+    for _, message in ipairs(as_list(xml.messages.message)) do
+        local msg_type = attr(message, "type")
+        if msg_type then
+            metadata.messages[msg_type] = {
+                category = attr(message, "category"),
+                description = attr(message, "description"),
+            }
+        end
+    end
+
+    metadata_cache[path] = metadata
+    return metadata
+end
+
 ---@param dir string
 ---@param file string
 ---@return FieldsDef
@@ -324,14 +412,6 @@ local function load_enums(dir, file)
         }
     end
     return dict
-end
-
-local function field_by_name(fields)
-    local by_name = {}
-    for tag, field in pairs(fields) do
-        by_name[field.name] = tag
-    end
-    return by_name
 end
 
 local function group_member_tags(children)
@@ -534,70 +614,98 @@ local function load_repository_groups(dir, fields)
     return groups, messages
 end
 
-local function load_quickfix_group(group, by_name)
+local quickfix_children
+
+local function load_quickfix_group(group, by_name, components, seen)
     local name = attr(group, "name")
     local count_tag = name and by_name[name] or nil
     if not count_tag then
         return nil
     end
 
-    local children = {}
-    for _, field in ipairs(as_list(group.field or group.Field)) do
-        local field_name = attr(field, "name")
-        local tag = field_name and by_name[field_name] or nil
-        if tag then
-            children[#children + 1] = { kind = "field", tag = tag }
-        end
-    end
-    for _, nested in ipairs(as_list(group.group or group.Group)) do
-        local nested_group = load_quickfix_group(nested, by_name)
-        if nested_group then
-            children[#children + 1] = nested_group
-        end
-    end
-
-    return new_group(name, count_tag, children)
+    return new_group(name, count_tag, quickfix_children(group, by_name, components, seen))
 end
 
-local function load_quickfix(path)
-    local xml = parse_file(path)
-    local root = xml.fix or xml.FIX
+quickfix_children = function(node, by_name, components, seen)
+    local children = {}
+    for _, child in ipairs(dom_elements(node)) do
+        local kind = child._name:lower()
+        if kind == "field" then
+            local tag = by_name[attr(child, "name")]
+            if tag then
+                children[#children + 1] = { kind = "field", tag = tag }
+            end
+        elseif kind == "group" then
+            local group = load_quickfix_group(child, by_name, components, seen)
+            if group then
+                children[#children + 1] = group
+            end
+        elseif kind == "component" then
+            local name = attr(child, "name")
+            local component = name and components[name] or nil
+            if component and not seen[name] then
+                seen[name] = true
+                vim.list_extend(children, quickfix_children(component, by_name, components, seen))
+                seen[name] = nil
+            end
+        end
+    end
+    return children
+end
+
+local function load_quickfix(path, metadata_path)
+    local document = parse_dom(path)
+    local root = document._name and document._name:lower() == "fix" and document or dom_element(document, "fix")
     assert(root ~= nil, "missing <fix> root")
 
-    local fields_root = root.fields or root.Fields
+    local fields_root = dom_element(root, "fields")
     assert(fields_root ~= nil, "missing <fields> section")
 
+    local metadata = load_metadata(metadata_path)
     local fields = {}
     local enums = {}
-    for _, value in ipairs(as_list(fields_root.field or fields_root.Field)) do
+    local by_name = {}
+    for _, value in ipairs(dom_elements(fields_root, "field")) do
         local tag = tonumber(attr(value, "number") or attr(value, "tag"))
         assert(tag ~= nil, "Invalid tag: " .. tostring(attr(value, "number") or attr(value, "tag")))
+        local field_metadata = metadata and metadata.fields[tag] or nil
+        local name = attr(value, "name")
 
         fields[tag] = {
             tag = tag,
-            name = attr(value, "name"),
+            name = name,
             type = attr(value, "type"),
-            description = attr(value, "description"),
+            description = (field_metadata and field_metadata.description) or attr(value, "description"),
         }
+        by_name[name] = tag
 
-        for _, enum in ipairs(as_list(value.value or value.Value)) do
+        for _, enum in ipairs(dom_elements(value, "value")) do
             local enum_value = attr(enum, "enum") or attr(enum, "value")
             if enum_value then
-                local description = attr(enum, "description") or attr(enum, "name")
+                local enum_metadata = metadata and metadata.enums[tag .. ":" .. enum_value] or nil
+                local enum_name = attr(enum, "description") or attr(enum, "name")
                 enums[tag .. ":" .. enum_value] = {
-                    name = description,
-                    description = description,
+                    name = enum_name,
+                    description = (enum_metadata and enum_metadata.description) or enum_name,
                 }
             end
         end
     end
 
+    local components = {}
+    local components_root = dom_element(root, "components")
+    for _, component in ipairs(dom_elements(components_root, "component")) do
+        local name = attr(component, "name")
+        if name then
+            components[name] = component
+        end
+    end
+
     local groups = {}
     local messages = {}
-    local by_name = field_by_name(fields)
-    local messages_root = root.messages or root.Messages
+    local messages_root = dom_element(root, "messages")
     if messages_root then
-        for _, message in ipairs(as_list(messages_root.message or messages_root.Message)) do
+        for _, message in ipairs(dom_elements(messages_root, "message")) do
             local msgtype = attr(message, "msgtype")
             local name = attr(message, "name")
             if msgtype and name then
@@ -605,17 +713,16 @@ local function load_quickfix(path)
                     name = name,
                     description = name,
                 }
-                -- QuickFIX DTD carries no message descriptions; name-only defs.
-                messages[msgtype] = { type = msgtype, name = name }
+                local message_metadata = metadata and metadata.messages[msgtype] or nil
+                messages[msgtype] = {
+                    type = msgtype,
+                    name = name,
+                    category = message_metadata and message_metadata.category or nil,
+                    description = message_metadata and message_metadata.description or nil,
+                }
             end
             if msgtype then
-                local children = {}
-                for _, group in ipairs(as_list(message.group or message.Group)) do
-                    local group_def = load_quickfix_group(group, by_name)
-                    if group_def then
-                        children[#children + 1] = group_def
-                    end
-                end
+                local children = quickfix_children(message, by_name, components, {})
                 groups[msgtype] = group_defs_by_count(children)
             end
         end
@@ -627,7 +734,7 @@ end
 ---@param source DictionarySource
 local function load_source(source)
     if source.format == "quickfix" then
-        return load_quickfix(source.path)
+        return load_quickfix(source.path, source.metadata_path)
     end
 
     local fields = load_fields(source.path, "Fields.xml")
@@ -1007,6 +1114,7 @@ end
 
 function M.clear_cache()
     M._cache = {}
+    metadata_cache = {}
 end
 
 local function fingerprint_part(path, root)
@@ -1037,7 +1145,7 @@ function M.source_fingerprint(source)
             source.components_path,
         }
     else
-        paths = { source.path }
+        paths = { source.path, source.metadata_path }
     end
     local parts = {}
     for _, path in ipairs(paths) do
@@ -1059,7 +1167,7 @@ function M.fingerprint()
 
     local root = repo_root()
     local parts = {}
-    for _, xml in ipairs(vim.fn.globpath(root .. "/xml", "**/Base/*.xml", false, true)) do
+    for _, xml in ipairs(vim.fn.globpath(root .. "/xml/standard", "*.xml", false, true)) do
         local part = fingerprint_part(xml, root)
         if part then
             parts[#parts + 1] = part
@@ -1148,7 +1256,7 @@ function M:message(value)
     return self:enum(35, value)
 end
 
---- Message metadata from Messages.xml; quickfix dictionaries carry name only.
+--- Message metadata from the configured dictionary source.
 ---@param msg_type string
 ---@return MessageDef|nil
 function M:message_def(msg_type)

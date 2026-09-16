@@ -369,12 +369,12 @@ T["FIX dictionary uses a synthetic legacy QuickFIX dictionary"] = function()
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
-    H.expect_no_inline_label(nvim(), "SELL")
+    H.expect_no_inline_label(nvim(), "LEGACY_SELL")
 
     nvim().cmd("FIX dictionary xml/custom/synthetic/FIX42-legacy.xml")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "SELL")
+    H.expect_inline_label(nvim(), "LEGACY_SELL")
 end
 
 T["setup dictionaries uses explicit version key"] = function()
@@ -424,7 +424,7 @@ T["setup dictionaries list shorthand accepts unique inferred versions"] = functi
 
     H.expect_inline_label(nvim(), "SyntheticMode")
     H.expect_inline_label(nvim(), "MODE_BETA")
-    H.expect_inline_label(nvim(), "SELL")
+    H.expect_inline_label(nvim(), "LEGACY_SELL")
 end
 
 T["setup dictionaries list shorthand rejects duplicate inferred versions"] = function()

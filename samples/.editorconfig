@@ -1,6 +1,6 @@
 [*.fix]
-fix_annotate_tag_enabled = false
-fix_annotate_value_enabled = false
+fix_annotate_tag_enabled = true
+fix_annotate_value_enabled = true
 fix_annotate_title_enabled = true
 fix_annotate_title_position = above
 fix_annotate_group_path_enabled = true

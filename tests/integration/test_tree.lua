@@ -743,7 +743,7 @@ T["source"]["y yanks the displayed label and gx opens field and group docs"] = f
         return { vim.fn.getreg("a"), vim.fn.getregtype("a"), _G._fix_test_ui_opens }
     end)()]])
     MiniTest.expect.equality(result, {
-        "MDEntryType = Bid · 269=0",
+        "MDEntryType = BID · 269=0",
         "v",
         {
             "https://www.onixs.biz/fix-dictionary/4.4/tagNum_269.html",

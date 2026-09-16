@@ -32,10 +32,10 @@ T["load version"] = MiniTest.new_set({
 T["load version"]["resolves BeginString and Heartbeat"] = function(version)
     local dict = Dictionary.load(version)
     MiniTest.expect.equality(dict:field(8).name, "BeginString")
-    MiniTest.expect.equality(dict:message("0").name, "Heartbeat")
+    MiniTest.expect.equality(dict:message("0").name:lower(), "heartbeat")
 end
 
-T["load version"]["loads repository group structure"] = function(version)
+T["load version"]["loads bundled group structure"] = function(version)
     local dict = Dictionary.load(version)
     local count = 0
     for _, groups in pairs(dict._groups or {}) do
@@ -46,7 +46,21 @@ T["load version"]["loads repository group structure"] = function(version)
     MiniTest.expect.equality(count > 0, true)
 end
 
-T["load version"]["loads message defs from Messages.xml"] = function(version)
+T["bundled quickfix components preserve nested group structure"] = function()
+    local dict = Dictionary.load("FIX.4.4")
+    local parties = dict._groups["D"][453]
+    MiniTest.expect.equality(parties.delimiter_tag, 448)
+    MiniTest.expect.equality(parties.groups_by_count[802].delimiter_tag, 523)
+end
+
+T["bundled metadata does not override quickfix dictionary values"] = function()
+    local dict = Dictionary.load("FIX.4.4")
+    MiniTest.expect.equality(dict:field(54).type, "CHAR")
+    MiniTest.expect.equality(dict:enum(54, "1").name, "BUY")
+    MiniTest.expect.equality(dict:enum(54, "1").description, "Buy")
+end
+
+T["load version"]["loads message definitions"] = function(version)
     local dict = Dictionary.load(version)
     -- Older repositories name MsgType D "OrderSingle", newer "NewOrderSingle".
     local def = dict:message_def("D")
@@ -54,7 +68,7 @@ T["load version"]["loads message defs from Messages.xml"] = function(version)
     MiniTest.expect.equality(#def.description > 0, true)
     MiniTest.expect.equality(dict:message_def("ZZZZ"), nil)
     -- The enum sugar keeps working alongside the new accessor.
-    MiniTest.expect.equality(dict:message("0").name, "Heartbeat")
+    MiniTest.expect.equality(dict:message("0").name:lower(), "heartbeat")
 end
 
 T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
@@ -63,7 +77,7 @@ T["FIXT.1.1 resolves to FIX.5.0SP2 dictionary"] = function()
     MiniTest.expect.equality(rawequal(fixt, sp2), true)
 end
 
-T["FIX.4.3 loads its own repository fields"] = function()
+T["FIX.4.3 loads its own standard fields"] = function()
     local dict = Dictionary.load("FIX.4.3")
     MiniTest.expect.equality(dict:field(659).name, "SideComplianceID")
 end

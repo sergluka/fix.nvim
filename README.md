@@ -109,8 +109,8 @@ Rules are plain Lua and can be switched off or added to in the config.
 
 Hovering a field (`vim.lsp.buf.hover()`) shows what the FIX dictionary knows
 about it: name, type, description, the decoded value, and a reference link.
-For MsgType (tag 35) the float adds the message-type description from the FIX
-repository.
+For MsgType (tag 35) the float adds the message-type description from the
+bundled standard metadata.
 
 ![Dictionary hover for the Side (54) field](./media/hover.png)
 
@@ -677,7 +677,7 @@ The same server answers `vim.lsp.buf.hover()`: the float shows the field's
 decoded name, tag, FIX data type, the dictionary description, the current value
 with its enum meaning, the repeating-group path when the field sits inside one,
 and an onixs.biz reference link. For MsgType (tag 35) it adds the message-type
-description from the FIX repository. `lsp.hover.enabled = false` turns hover
+description from the bundled standard metadata. `lsp.hover.enabled = false` turns hover
 off on its own; `lsp.validate.enabled = false` keeps hover but silences the
 diagnostics; `:FIX lsp toggle` (or `lsp.enabled = false`) turns the whole
 subsystem off.
@@ -733,11 +733,11 @@ CI runs the same image via `.github/workflows/ci.yml`. Host-side linting still r
 ## License
 
 Licensed under Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
-Bundled FIX Repository data retains its own terms; see
+Bundled dictionary data retains its upstream terms; see
 [THIRD_PARTY_LICENSES.txt](./THIRD_PARTY_LICENSES.txt) and
 [xml/README.md](./xml/README.md).
 
 ## Links
 
 - [tree-sitter-fix parser](https://github.com/sergluka/tree-sitter-fix)
-- [FIX Repository](https://www.fixtrading.org/standards/fix-repository/)
+- [FIX Repository](https://www.fixtrading.org/fix-repository/)

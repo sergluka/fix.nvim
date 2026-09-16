@@ -1,31 +1,47 @@
 # Bundled dictionary data
 
-## FIX Repository
+## Standard dictionaries
 
-The `FIX.*/Base/` and `FIXT.1.1/Base/` directories contain per-version extracts
-of the FIX Repository, 2010 Edition, under the terms described in
-`THIRD_PARTY_LICENSES.txt`.
+`standard/FIX40.xml` through `standard/FIXT11.xml` are unmodified QuickFIX/J
+dictionaries. They were retrieved on 2026-09-16 from commit
+`560200e6237bb6172acb18cbf3e5513fdf8cacb5`:
 
-The five files under `FIX.4.3/Base/` were retrieved on 2026-09-16 from commit
-`54c3b328d774d92e0b41ceb0237547980f7ae9de` of the public
-`VirtuFinancial/FixClient` repository:
+<https://github.com/quickfix-j/quickfixj/tree/560200e6237bb6172acb18cbf3e5513fdf8cacb5/quickfixj-messages>
 
-`https://github.com/VirtuFinancial/FixClient/tree/54c3b328d774d92e0b41ceb0237547980f7ae9de/Dictionary/Repository/FIX.4.3/Base`
+QuickFIX/J distributes these files under the QuickFIX Software License,
+Version 1.0. See `THIRD_PARTY_LICENSES.txt`.
 
-Raw SHA-256 values:
+`standard/FIXLatest-metadata.xml` contains field, enum, and message metadata
+mechanically projected from the official `OrchestraFIXLatest.xml`. The source
+was retrieved on 2026-09-16 from commit
+`cd24169a2abd8daba7c360987c7a46ca11873a12`:
 
-- `Components.xml`: `fa4966dd8479701c1201483402173d3f118789129046d62b4603c48c3b856619`
-- `Enums.xml`: `86605a4ff0c87296f2740223a9e39aa92bedb0300c4a230d677f2bcd08d6d533`
-- `Fields.xml`: `530e425498d8c08ee8706776ce6b421530e5dffdd2d190edba2f6dad3d9243de`
-- `Messages.xml`: `132b7ce9a4b10da592f6c240d55f4e8c5caf4baba1975cb70f2c4e527e62b1d6`
-- `MsgContents.xml`: `eec8a58368ed5fa602f8286f5889e26a5eb167d42d1186642fe5c6715282a061`
+<https://github.com/FIXTradingCommunity/orchestrations/blob/cd24169a2abd8daba7c360987c7a46ca11873a12/FIX%20Standard/OrchestraFIXLatest.xml>
 
-These hashes identify the downloaded files. The repository copies normalize
-line endings and indentation without changing the XML data.
+The source SHA-256 is
+`1bf82a22423d6504fbb77c4c8c522a4efefb32aec19b630c138860ccddf8228d`.
+The projection retains only documentation metadata:
 
-The previous `FIX.4.3/Base/Fields.xml` was an incorrect copy of the FIX 4.2
-file. Replacing the complete set keeps this version reproducible from one
-pinned public source.
+- field ID and first non-empty `SYNOPSIS`;
+- code-set field ID, value, and first non-empty `SYNOPSIS`;
+- message type, category, and first non-empty `SYNOPSIS`.
+
+QuickFIX/J remains authoritative for version membership, names, types, enum
+values, enum display names, messages, components, and repeating groups.
+Orchestra metadata cannot introduce or redefine a dictionary element.
+
+The `FIXTradingCommunity/orchestrations` repository licenses the source under
+Apache-2.0. See `THIRD_PARTY_LICENSES.txt`.
+
+`standard/SHA256SUMS` records the SHA-256 of every bundled dictionary and the
+derived metadata file. The QuickFIX/J dictionaries are unmodified, so their
+manifest hashes are also the hashes of the pinned upstream files. Verify all
+bundled files from this directory with:
+
+```sh
+cd xml/standard
+sha256sum -c SHA256SUMS
+```
 
 ## Test dictionaries
 

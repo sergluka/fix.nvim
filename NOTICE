@@ -1,5 +1,11 @@
 fix.nvim — https://github.com/sergluka/fix.nvim
 Copyright 2025-2026 Sergey Lukashevich
 
-This product bundles data derived from the FIX Repository,
-© FIX Protocol Limited, used under licence. See THIRD_PARTY_LICENSES.txt.
+This product includes software developed by quickfixengine.org
+(http://www.quickfixengine.org/).
+
+This product includes metadata derived from FIX Orchestra,
+Copyright 2017-2026 FIX Protocol Limited, licensed under Apache-2.0.
+
+See THIRD_PARTY_LICENSES.txt for license details and xml/README.md for exact
+source provenance.

@@ -485,7 +485,7 @@ The same server answers |vim.lsp.buf.hover()|: the float shows the field's
 decoded name, tag, FIX data type, the dictionary description, the current
 value with its enum meaning, the repeating-group path when the field sits
 inside one, and an onixs.biz reference link. For MsgType (tag 35) it adds the
-message-type description from the FIX repository. Custom quickfix-style
+message-type description from the bundled standard metadata. Custom quickfix-style
 dictionaries carry names but no descriptions, so their hovers are shorter.
 `lsp.hover.enabled = false` turns hover off on its own;
 `lsp.validate.enabled = false` keeps hover but silences the diagnostics;
