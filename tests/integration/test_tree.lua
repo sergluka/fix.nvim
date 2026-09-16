@@ -379,7 +379,7 @@ end
 
 T["source"]["refreshes loaded fields when FIX dictionary registers a dictionary"] = function()
     local nvim = Helpers.nvim()
-    local message = "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|"
+    local message = "8=FIX.4.4|9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|"
     setup_tree(nvim, nil, message)
 
     local refreshed = nvim.lua_get([[(function()
@@ -388,7 +388,7 @@ T["source"]["refreshes loaded fields when FIX dictionary registers a dictionary"
         local root = state.tree:get_nodes()[1]
         require("fix.neo_tree").load_message(state, root)
         local before = state._fix_generation
-        require("fix").use_dictionary("xml/custom/binance/spot-fix-oe.xml")
+        require("fix").use_dictionary("xml/custom/synthetic/oe-fix44.xml")
         return vim.wait(5000, function()
             state = manager.get_state("fix")
             root = state.tree and state.tree:get_nodes()[1]
@@ -396,8 +396,8 @@ T["source"]["refreshes loaded fields when FIX dictionary registers a dictionary"
                 return false
             end
             for _, node in ipairs(state.tree:get_nodes(root.id)) do
-                if node.type == "field" and node.name == "25035" then
-                    return node.extra.field.tag_text == "MessageHandling"
+                if node.type == "field" and node.name == "50001" then
+                    return node.extra.field.tag_text == "SyntheticMode"
                 end
             end
             return false

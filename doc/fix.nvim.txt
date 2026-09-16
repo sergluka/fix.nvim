@@ -532,19 +532,19 @@ Configure dictionaries in `setup()`:
     require("fix").setup({
       dictionaries = {
         ["FIX.4.4"] = {
-          path = "xml/custom/binance/spot-fix-oe.xml",
+          path = "xml/custom/synthetic/oe-fix44.xml",
           mode = "quickfix", -- "auto" | "quickfix" | "repository"
           ---@type table<integer, FixTagDecoder>
           tags = {
-            [25035] = function(field, _ctx)
+            [50001] = function(field, _ctx)
               return {
-                tag_text = "MessageHandling",
-                value_text = ({ ["1"] = "UNORDERED", ["2"] = "SEQUENTIAL" })[field.value],
+                tag_text = "SyntheticMode",
+                value_text = ({ ["1"] = "MODE_ALPHA", ["2"] = "MODE_BETA" })[field.value],
               }
             end,
           },
         },
-        ["FIX.4.2"] = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+        ["FIX.4.2"] = "xml/custom/synthetic/FIX42-legacy.xml",
       },
     })
 <
@@ -561,7 +561,7 @@ the existing value. A pathless entry such as `dictionaries["FIX.4.4"] =
 
 Register a dictionary at runtime:
 >
-    :FIX dictionary xml/custom/binance/spot-fix-oe.xml
+    :FIX dictionary xml/custom/synthetic/oe-fix44.xml
 <
 `FIX dictionary` accepts a QuickFIX-style XML file or a FIX Repository
 directory containing `Fields.xml` and `Enums.xml`. Repository dictionaries can

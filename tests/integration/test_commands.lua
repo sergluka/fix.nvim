@@ -340,47 +340,41 @@ T["FIX cache clear is registered"] = function()
     H.expect_no_error_notifications(nvim())
 end
 
-T["FIX dictionary uses Binance QuickFIX dictionary"] = function()
+T["FIX dictionary uses a synthetic QuickFIX dictionary"] = function()
     H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|25036=1|25000=5000|10=000|",
+            "8=FIX.4.4|9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
-    H.expect_no_inline_label(nvim(), "MessageHandling")
+    H.expect_no_inline_label(nvim(), "SyntheticMode")
 
-    nvim().cmd("FIX dictionary xml/custom/binance/spot-fix-oe.xml")
+    nvim().cmd("FIX dictionary xml/custom/synthetic/oe-fix44.xml")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "MessageHandling")
-    H.expect_inline_label(nvim(), "SEQUENTIAL")
-    H.expect_inline_label(nvim(), "ResponseMode")
-    H.expect_inline_label(nvim(), "EVERYTHING")
-    H.expect_inline_label(nvim(), "RecvWindow")
+    H.expect_inline_label(nvim(), "SyntheticMode")
+    H.expect_inline_label(nvim(), "MODE_BETA")
 end
 
-T["FIX dictionary uses Coinbase QuickFIX dictionary"] = function()
+T["FIX dictionary uses a synthetic legacy QuickFIX dictionary"] = function()
     H.enable_inline_annotations(nvim())
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "8=FIX.4.2|9=0|35=D|34=1|49=A|52=20240627-11:17:25.223|56=B|7928=O|9406=Y|10=000|",
+            "8=FIX.4.2|9=0|35=D|11=ORDER-1|54=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
-    H.expect_no_inline_label(nvim(), "SelfTradePrevention")
+    H.expect_no_inline_label(nvim(), "SELL")
 
-    nvim().cmd("FIX dictionary xml/custom/coinbase/order-entry/FIX42-prod-sand.xml")
+    nvim().cmd("FIX dictionary xml/custom/synthetic/FIX42-legacy.xml")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "SelfTradePrevention")
-    H.expect_inline_label(nvim(), "CANCEL_OLDEST")
-    H.expect_inline_label(nvim(), "DropCopyFlag")
-    H.expect_inline_label(nvim(), "YES")
+    H.expect_inline_label(nvim(), "SELL")
 end
 
 T["setup dictionaries uses explicit version key"] = function()
@@ -388,7 +382,7 @@ T["setup dictionaries uses explicit version key"] = function()
         require("fix").setup({
             dictionaries = {
                 ["FIX.4.4"] = {
-                    path = "xml/custom/binance/spot-fix-oe.xml",
+                    path = "xml/custom/synthetic/oe-fix44.xml",
                     mode = "quickfix",
                 },
             },
@@ -398,22 +392,22 @@ T["setup dictionaries uses explicit version key"] = function()
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+            "8=FIX.4.4|9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "MessageHandling")
-    H.expect_inline_label(nvim(), "SEQUENTIAL")
+    H.expect_inline_label(nvim(), "SyntheticMode")
+    H.expect_inline_label(nvim(), "MODE_BETA")
 end
 
 T["setup dictionaries list shorthand accepts unique inferred versions"] = function()
     nvim().lua([[
         require("fix").setup({
             dictionaries = {
-                "xml/custom/binance/spot-fix-oe.xml",
-                "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+                "xml/custom/synthetic/oe-fix44.xml",
+                "xml/custom/synthetic/FIX42-legacy.xml",
             },
         })
     ]])
@@ -421,17 +415,16 @@ T["setup dictionaries list shorthand accepts unique inferred versions"] = functi
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "8=FIX.4.4|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
-            "8=FIX.4.2|9=0|35=D|34=1|49=A|52=20240627-11:17:25.223|56=B|7928=O|10=000|",
+            "8=FIX.4.4|9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|",
+            "8=FIX.4.2|9=0|35=D|11=ORDER-2|54=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "MessageHandling")
-    H.expect_inline_label(nvim(), "SEQUENTIAL")
-    H.expect_inline_label(nvim(), "SelfTradePrevention")
-    H.expect_inline_label(nvim(), "CANCEL_OLDEST")
+    H.expect_inline_label(nvim(), "SyntheticMode")
+    H.expect_inline_label(nvim(), "MODE_BETA")
+    H.expect_inline_label(nvim(), "SELL")
 end
 
 T["setup dictionaries list shorthand rejects duplicate inferred versions"] = function()
@@ -439,8 +432,8 @@ T["setup dictionaries list shorthand rejects duplicate inferred versions"] = fun
         select(2, pcall(function()
             require("fix").setup({
                 dictionaries = {
-                    "xml/custom/binance/spot-fix-oe.xml",
-                    "xml/custom/binance/spot-fix-md.xml",
+                    "xml/custom/synthetic/oe-fix44.xml",
+                    "xml/custom/synthetic/oe-fix44.xml",
                 },
             })
         end))
@@ -453,7 +446,7 @@ T["setup dictionaries explicit key overrides inferred XML version"] = function()
     nvim().lua([[
         require("fix").setup({
             dictionaries = {
-                ["FIX.4.2"] = "xml/custom/binance/spot-fix-oe.xml",
+                ["FIX.4.2"] = "xml/custom/synthetic/oe-fix44.xml",
             },
         })
     ]])
@@ -461,14 +454,14 @@ T["setup dictionaries explicit key overrides inferred XML version"] = function()
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "8=FIX.4.2|9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+            "8=FIX.4.2|9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "MessageHandling")
-    H.expect_inline_label(nvim(), "SEQUENTIAL")
+    H.expect_inline_label(nvim(), "SyntheticMode")
+    H.expect_inline_label(nvim(), "MODE_BETA")
 end
 
 T["setup dictionaries can satisfy fallback_version"] = function()
@@ -477,7 +470,7 @@ T["setup dictionaries can satisfy fallback_version"] = function()
             fallback_version = "FIX.9.9",
             dictionaries = {
                 ["FIX.9.9"] = {
-                    path = "xml/custom/binance/spot-fix-oe.xml",
+                    path = "xml/custom/synthetic/oe-fix44.xml",
                     mode = "quickfix",
                 },
             },
@@ -487,14 +480,14 @@ T["setup dictionaries can satisfy fallback_version"] = function()
     nvim().cmd("enew")
     nvim().lua([[
         vim.api.nvim_buf_set_lines(0, 0, -1, false, {
-            "9=0|35=A|34=1|49=EXAMPLE|52=20240627-11:17:25.223|56=SPOT|25035=2|10=000|",
+            "9=0|35=D|11=ORDER-1|55=SYNTHETIC|54=1|40=2|50001=2|10=000|",
         })
     ]])
     nvim().cmd("set filetype=fix")
     H.wait_annotated(nvim())
 
-    H.expect_inline_label(nvim(), "MessageHandling")
-    H.expect_inline_label(nvim(), "SEQUENTIAL")
+    H.expect_inline_label(nvim(), "SyntheticMode")
+    H.expect_inline_label(nvim(), "MODE_BETA")
 end
 
 T["setup dictionaries rejects invalid mode"] = function()
@@ -503,7 +496,7 @@ T["setup dictionaries rejects invalid mode"] = function()
             require("fix").setup({
                 dictionaries = {
                     ["FIX.4.4"] = {
-                        path = "xml/custom/binance/spot-fix-oe.xml",
+                        path = "xml/custom/synthetic/oe-fix44.xml",
                         mode = "invalid",
                     },
                 },

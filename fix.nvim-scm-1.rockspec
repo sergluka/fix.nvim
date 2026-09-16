@@ -9,7 +9,7 @@ source = {
 description = {
   summary = "FIX protocol support for Neovim",
   homepage = "https://github.com/sergluka/fix.nvim",
-  license = "MIT",
+  license = "Apache-2.0",
 }
 
 dependencies = {

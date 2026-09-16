@@ -37,8 +37,8 @@ The plugin decorates FIX-message buffers with extmark-based virtual text; it doe
 - `lua/fix/consts.lua` — `FixVersion` enum used as the canonical internal version key (tree-sitter BeginString strings are mapped to it in `document.lua`).
 - `queries/fix/{highlights,textobjects}.scm` — tree-sitter queries shipped with the plugin.
 - `xml/FIX.*` — vendored FIX Repository data ((c) FIX Protocol Limited, used under licence — see `plugin/fix.lua` header and `THIRD_PARTY_LICENSES.txt`). Do not regenerate by hand.
-- `xml/custom/` — vendored public broker dictionaries used by tests (Coinbase Exchange and Binance Spot); source/terms are recorded in `xml/custom/README.md` and `THIRD_PARTY_LICENSES.txt`.
-- `samples/` — `.fix` files for manual testing in Neovim.
+- `xml/custom/synthetic/` — Apache-2.0 QuickFIX dictionaries written for tests; no broker dictionaries are vendored. See `xml/custom/README.md`.
+- `samples/` — `.fix` files for manual testing in Neovim. `samples/big.fix` contains fully synthetic random data.
 - `tests/integration/` — MiniTest specs (`test_dictionary`, `test_annotate`, `test_commands`, `test_lifecycle`, `test_edge_cases`, `test_cache`, `test_persist`, `test_picker`, `test_validation`) — driven by `tests/integration/run.lua`. Bootstrap via `tests/integration/minimal_init.lua`; shared helpers in `tests/integration/helpers.lua` (key patterns: `wait_annotated` polls `require("fix.render").is_idle()`, and `load_fixture` asserts extmarks afterwards); fixtures under `tests/integration/fixtures/`. The whole suite runs inside the Podman image built from `Containerfile`.
 - `Containerfile` — multi-stage Podman image: builder compiles `tree-sitter-fix` and clones Lua deps at hardcoded SHAs; runtime carries Neovim 0.12.0 + `fix.so` + `/opt/deps/*`. SHAs are string literals (no `ARG`).
 - `bin/test-integration` — wrapper that builds the image on demand and runs the suite; supports `--rebuild` and `--filter <pattern>`.

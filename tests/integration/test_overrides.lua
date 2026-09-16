@@ -4,8 +4,8 @@ local MiniTest = require("mini.test")
 local T = H.new_test_set()
 local nvim = H.nvim
 
-local BINANCE_OE = "xml/custom/binance/spot-fix-oe.xml"
-local BINANCE_MD = "xml/custom/binance/spot-fix-md.xml"
+local SYNTHETIC_OE = "xml/custom/synthetic/oe-fix44.xml"
+local SYNTHETIC_MD = "xml/custom/synthetic/md-fix50.xml"
 
 --- New buffer, given lines, `fix.overrides` attached — but no `filetype=fix`
 --- and no wait: the module doesn't need a parser and nothing else consumes
@@ -184,13 +184,13 @@ end
 T["effective(): a dictionary-only override does not build an overlay"] = function()
     nvim().lua(([[
         require("fix").setup({
-            dictionaries = { { path = %q, mode = "quickfix", name = "binance-oe" } },
+            dictionaries = { { path = %q, mode = "quickfix", name = "synthetic-oe" } },
         })
-    ]]):format(BINANCE_OE))
+    ]]):format(SYNTHETIC_OE))
     nvim().cmd("enew")
     nvim().lua([[
         local buf = vim.api.nvim_get_current_buf()
-        vim.b[buf].fix_dictionary = "binance-oe"
+        vim.b[buf].fix_dictionary = "synthetic-oe"
         require("fix.overrides").attach(buf)
     ]])
     local same =
@@ -232,7 +232,7 @@ end
 -- allow_paths -------------------------------------------------------------
 
 T["allow_paths: a modeline dictionary path is refused by default"] = function()
-    local buf = set_lines_and_attach({ ("# fix: dictionary=%s"):format(BINANCE_OE) })
+    local buf = set_lines_and_attach({ ("# fix: dictionary=%s"):format(SYNTHETIC_OE) })
     H.expect_notified(nvim(), "overrides.modeline.allow_paths")
     local source = nvim().lua_get(("require('fix.overrides').dictionary_source(%d)"):format(buf))
     MiniTest.expect.equality(source, vim.NIL)
@@ -240,7 +240,7 @@ end
 
 T["allow_paths: enabling it accepts a modeline dictionary path"] = function()
     nvim().lua([[require("fix").setup({ overrides = { modeline = { allow_paths = true } } })]])
-    local buf = set_lines_and_attach({ ("# fix: dictionary=%s"):format(BINANCE_OE) })
+    local buf = set_lines_and_attach({ ("# fix: dictionary=%s"):format(SYNTHETIC_OE) })
     local version = nvim().lua_get(("require('fix.overrides').dictionary_source(%d).version"):format(buf))
     MiniTest.expect.equality(type(version), "string")
 end
@@ -248,12 +248,12 @@ end
 T["allow_paths: a registered dictionary name works regardless"] = function()
     nvim().lua(([[
         require("fix").setup({
-            dictionaries = { { path = %q, mode = "quickfix", name = "binance-oe" } },
+            dictionaries = { { path = %q, mode = "quickfix", name = "synthetic-oe" } },
         })
-    ]]):format(BINANCE_OE))
-    local buf = set_lines_and_attach({ "# fix: dictionary=binance-oe" })
+    ]]):format(SYNTHETIC_OE))
+    local buf = set_lines_and_attach({ "# fix: dictionary=synthetic-oe" })
     local name = nvim().lua_get(("require('fix.overrides').describe(%d).overrides.dictionary.value.name"):format(buf))
-    MiniTest.expect.equality(name, "binance-oe")
+    MiniTest.expect.equality(name, "synthetic-oe")
 end
 
 T["dictionary: an unresolvable path warns even when paths are allowed"] = function()
@@ -296,15 +296,15 @@ T["cache_suffix: differs for two different dictionaries"] = function()
     nvim().lua(([[
         require("fix").setup({
             dictionaries = {
-                { path = %q, mode = "quickfix", name = "binance-oe" },
-                { path = %q, mode = "quickfix", name = "binance-md" },
+                { path = %q, mode = "quickfix", name = "synthetic-oe" },
+                { path = %q, mode = "quickfix", name = "synthetic-md" },
             },
         })
-    ]]):format(BINANCE_OE, BINANCE_MD))
+    ]]):format(SYNTHETIC_OE, SYNTHETIC_MD))
     nvim().cmd("enew")
     nvim().lua([[
         local buf = vim.api.nvim_get_current_buf()
-        vim.b[buf].fix_dictionary = "binance-oe"
+        vim.b[buf].fix_dictionary = "synthetic-oe"
         require("fix.overrides").attach(buf)
     ]])
     local buf = nvim().lua_get("vim.api.nvim_get_current_buf()")
@@ -312,7 +312,7 @@ T["cache_suffix: differs for two different dictionaries"] = function()
 
     nvim().lua([[
         local buf = vim.api.nvim_get_current_buf()
-        vim.b[buf].fix_dictionary = "binance-md"
+        vim.b[buf].fix_dictionary = "synthetic-md"
         require("fix.overrides").refresh(buf)
     ]])
     local suffix_b = nvim().lua_get([[require("fix.overrides").cache_suffix(vim.api.nvim_get_current_buf())]])
@@ -1118,7 +1118,10 @@ T["editorconfig: vim.g.editorconfig = false + reopen reverts to global"] = funct
 end
 
 T["editorconfig: fix_dictionary=<path> is refused by default"] = function()
-    local buf = open_with_editorconfig({ ("fix_dictionary = %s"):format(BINANCE_OE) }, { "8=FIX.4.4|9=5|35=0|10=000|" })
+    local buf = open_with_editorconfig(
+        { ("fix_dictionary = %s"):format(SYNTHETIC_OE) },
+        { "8=FIX.4.4|9=5|35=0|10=000|" }
+    )
     H.expect_notified(nvim(), "allow_paths")
     local source = nvim().lua_get(("require('fix.overrides').dictionary_source(%d)"):format(buf))
     MiniTest.expect.equality(source, vim.NIL)
@@ -1126,7 +1129,10 @@ end
 
 T["editorconfig: fix_dictionary=<path> is accepted when allow_paths is enabled"] = function()
     nvim().lua([[require("fix").setup({ overrides = { modeline = { allow_paths = true } } })]])
-    local buf = open_with_editorconfig({ ("fix_dictionary = %s"):format(BINANCE_OE) }, { "8=FIX.4.4|9=5|35=0|10=000|" })
+    local buf = open_with_editorconfig(
+        { ("fix_dictionary = %s"):format(SYNTHETIC_OE) },
+        { "8=FIX.4.4|9=5|35=0|10=000|" }
+    )
     local version = nvim().lua_get(("require('fix.overrides').dictionary_source(%d).version"):format(buf))
     MiniTest.expect.equality(type(version), "string")
 end
@@ -1134,12 +1140,12 @@ end
 T["editorconfig: fix_dictionary=<name> resolves regardless of allow_paths"] = function()
     nvim().lua(([[
         require("fix").setup({
-            dictionaries = { { path = %q, mode = "quickfix", name = "binance-oe" } },
+            dictionaries = { { path = %q, mode = "quickfix", name = "synthetic-oe" } },
         })
-    ]]):format(BINANCE_OE))
-    local buf = open_with_editorconfig({ "fix_dictionary = binance-oe" }, { "8=FIX.4.4|9=5|35=0|10=000|" })
+    ]]):format(SYNTHETIC_OE))
+    local buf = open_with_editorconfig({ "fix_dictionary = synthetic-oe" }, { "8=FIX.4.4|9=5|35=0|10=000|" })
     local name = nvim().lua_get(("require('fix.overrides').describe(%d).overrides.dictionary.value.name"):format(buf))
-    MiniTest.expect.equality(name, "binance-oe")
+    MiniTest.expect.equality(name, "synthetic-oe")
 end
 
 T["editorconfig: a mixed-case value does not resolve; the lowercased value does"] = function()

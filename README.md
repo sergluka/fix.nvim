@@ -49,7 +49,7 @@ The optional Neo-tree source presents messages, fields, and repeating groups as
 a hierarchy. Decoded names and values lead each label; raw tags and enum values
 remain visible as secondary context.
 
-![Expanded FIX message and repeating group in Neo-tree](./media/tree.png)
+![Expanded FIX message and repeating groups in Neo-tree](./media/tree.png)
 
 Register the source in your Neo-tree setup; fix.nvim does not call
 `neo-tree.setup()` for you:
@@ -81,8 +81,7 @@ the version from `BeginString` (tag `8`). Add QuickFIX XML or FIX Repository
 dictionaries through `setup()`, or switch one for the session with:
 
 ```vim
-:FIX dictionary xml/custom/binance/spot-fix-oe.xml
-:FIX dictionary xml/custom/coinbase/order-entry/FIX42-prod-sand.xml
+:FIX dictionary xml/custom/synthetic/oe-fix44.xml
 ```
 
 Lua decoders can override tag and enum labels; repository message metadata also
@@ -168,7 +167,7 @@ buffer:
 ```lua
 require("fix").setup({
   dictionaries = {
-    { path = "xml/custom/binance/spot-fix-oe.xml", mode = "quickfix", name = "binance-oe" },
+    { path = "xml/custom/synthetic/oe-fix44.xml", mode = "quickfix", name = "order-entry" },
   },
   formatters = {
     tag = {
@@ -181,7 +180,7 @@ require("fix").setup({
 ```
 
 ```
-# fix: dictionary=binance-oe, formatter.tag=loud
+# fix: dictionary=order-entry, formatter.tag=loud
 ```
 
 A modeline is read out of the file you are opening, so it is only as
@@ -279,20 +278,20 @@ examples.
   -- Uncomment and adapt entries as needed; the default is an empty table.
   dictionaries = {
     -- ["FIX.4.4"] = {
-    --   path = "xml/custom/binance/spot-fix-oe.xml",
+    --   path = "/path/to/order-entry.xml",
     --   mode = "quickfix", -- "auto" | "quickfix" | "repository"
-    --   name = "binance-oe", -- optional: selectable from a per-buffer override
+    --   name = "order-entry", -- optional: selectable from a per-buffer override
     --   ---@type table<integer, FixTagDecoder>
     --   tags = {
-    --     [25035] = function(field, _ctx)
+    --     [50001] = function(field, _ctx)
     --       return {
-    --         tag_text = "MessageHandling",
-    --         value_text = ({ ["1"] = "UNORDERED", ["2"] = "SEQUENTIAL" })[field.value],
+    --         tag_text = "SyntheticMode",
+    --         value_text = ({ ["1"] = "MODE_ALPHA", ["2"] = "MODE_BETA" })[field.value],
     --       }
     --     end,
     --   },
     -- },
-    -- ["FIX.4.2"] = "xml/custom/coinbase/order-entry/FIX42-prod-sand.xml",
+    -- ["FIX.4.2"] = "/path/to/legacy.xml",
   },
 
   -- Named formatters, selectable from a per-buffer override
@@ -730,6 +729,13 @@ podman run --rm -it --entrypoint nvim \
 ```
 
 CI runs the same image via `.github/workflows/ci.yml`. Host-side linting still runs with `stylua` and `luacheck`.
+
+## License
+
+Licensed under Apache-2.0. See [LICENSE](./LICENSE) and [NOTICE](./NOTICE).
+Bundled FIX Repository data retains its own terms; see
+[THIRD_PARTY_LICENSES.txt](./THIRD_PARTY_LICENSES.txt) and
+[xml/README.md](./xml/README.md).
 
 ## Links
 
