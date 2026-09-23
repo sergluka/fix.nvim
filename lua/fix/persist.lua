@@ -6,7 +6,7 @@ local Overrides = require("fix.overrides")
 local M = {}
 
 -- 3: group instances carry `count_index`.
--- 4: tree-sitter-fix keeps a separator inside a value as text.
+-- 4: the header carries `parser_fingerprint`.
 local FORMAT_VERSION = 4
 
 -- Set on the first filesystem failure; persistence stays off for the session.
@@ -43,6 +43,22 @@ function M.fingerprint()
     return fingerprint
 end
 
+local parser_fingerprint
+
+--- Entries are parser output, so a different grammar invalidates them. Taken once:
+--- Neovim never reloads a parser, and a reinstall mid-session would otherwise
+--- stamp the old parser's output with the new file's identity.
+---@return string
+function M.parser_fingerprint()
+    if parser_fingerprint == nil then
+        local path = vim.api.nvim_get_runtime_file("parser/fix.*", false)[1]
+        local stat = path and vim.uv.fs_stat(path)
+        parser_fingerprint = stat and string.format("%s:%d:%d.%d", path, stat.size, stat.mtime.sec, stat.mtime.nsec)
+            or ""
+    end
+    return parser_fingerprint
+end
+
 ---@param buf number
 function M.load_into_cache(buf)
     if not enabled() or Overrides.persist_excluded(buf) then
@@ -65,6 +81,7 @@ function M.load_into_cache(buf)
         or type(data) ~= "table"
         or data.format_version ~= FORMAT_VERSION
         or data.dict_fingerprint ~= M.fingerprint()
+        or data.parser_fingerprint ~= M.parser_fingerprint()
         or data.fallback_version ~= opts().fallback_version
         or type(data.entries) ~= "table"
     then
@@ -150,6 +167,7 @@ function M.save(buf, keys, sync)
     local ok_enc, blob = pcall(vim.mpack.encode, {
         format_version = FORMAT_VERSION,
         dict_fingerprint = M.fingerprint(),
+        parser_fingerprint = M.parser_fingerprint(),
         fallback_version = opts().fallback_version,
         entries = entries,
     })

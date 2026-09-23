@@ -565,6 +565,7 @@ T["persist gate: a buffer with Lua tag decoders does not load a stale persist fi
         local blob = vim.mpack.encode({
             format_version = 4,
             dict_fingerprint = require("fix.persist").fingerprint(),
+            parser_fingerprint = require("fix.persist").parser_fingerprint(),
             fallback_version = require("fix").opts.fallback_version,
             entries = { seed = { version = "FIX.4.4", fields = {} } },
         })

@@ -256,6 +256,39 @@ T["persist"]["stale fallback version is discarded"] = function()
     Helpers.wait_annotated(nvim)
 end
 
+T["persist"]["a cache written by another parser is discarded"] = function()
+    local nvim = Helpers.nvim()
+    nvim.lua(SETUP)
+    nvim.lua([[
+        vim.fn.mkdir(_G._persist_dir, "p")
+        local name = vim.fn.sha256(vim.fn.fnamemodify("tests/integration/fixtures/4.4.fix", ":p")):sub(1, 32)
+        local blob = vim.mpack.encode({
+            format_version = 4,
+            dict_fingerprint = require("fix.persist").fingerprint(),
+            parser_fingerprint = "another-parser",
+            fallback_version = require("fix").opts.fallback_version,
+            entries = { abc = { version = "FIX.4.4", fields = {} } },
+        })
+        local f = io.open(_G._persist_dir .. "/" .. name .. ".mpack", "wb")
+        f:write(blob)
+        f:close()
+    ]])
+    nvim.lua([[
+        _G._count_after_load = nil
+        local persist = require("fix.persist")
+        local orig = persist.load_into_cache
+        persist.load_into_cache = function(buf)
+            orig(buf)
+            _G._count_after_load = require("fix.cache")._count
+        end
+    ]])
+    nvim.cmd("edit tests/integration/fixtures/4.4.fix")
+    local ok = Helpers.wait_for(nvim, [[_G._count_after_load ~= nil]], 2000)
+    MiniTest.expect.equality(ok, true)
+    MiniTest.expect.equality(nvim.lua_get([[_G._count_after_load]]), 0)
+    Helpers.wait_annotated(nvim)
+end
+
 T["persist"]["unnamed buffer is not persisted"] = function()
     local nvim = Helpers.nvim()
     nvim.lua(SETUP)
