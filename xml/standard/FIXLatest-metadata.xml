@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Documentation-only projection derived from FIXTradingCommunity/orchestrations
+  commit cd24169a2abd8daba7c360987c7a46ca11873a12.
+  Modified for fix.nvim. Copyright 2017-2026 FIX Protocol Limited.
+  Licensed under Apache-2.0; see ../README.md.
+-->
 <metadata sourceVersion="FIX.Latest_EP312">
   <fields>
     <field id="1" description="Account mnemonic as agreed between buy and sell sides, e.g. broker and institution or investor/intermediary and fund manager."/>

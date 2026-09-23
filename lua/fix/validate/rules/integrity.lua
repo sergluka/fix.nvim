@@ -1,4 +1,6 @@
 --- BodyLength (tag 9) and CheckSum (tag 10) integrity.
+--- Source: FIX Trading Community, FIX TagValue Encoding.
+--- https://www.fixtrading.org/standards/tagvalue-online/ (retrieved 2026-09-18).
 ---
 --- Both quantities are derived from field spans rather than the raw line, so
 --- whatever byte separates the fields in the log (`|`, `^` or a real SOH) is
