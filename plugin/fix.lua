@@ -47,16 +47,26 @@ local function register_treesitter()
     local config = {
         install_info = {
             url = "https://github.com/sergluka/tree-sitter-fix",
-            files = { "src/parser.c" }, -- used by master branch; ignored by main
+            branch = "master",
+            files = { "src/parser.c", "src/scanner.c" }, -- used by master branch; ignored by main
         },
     }
     if type(parsers.get_parser_configs) == "function" then
         -- nvim-treesitter `master` branch
         parsers.get_parser_configs().fix = config
     else
-        -- nvim-treesitter `main` branch: parsers is a `lang -> config` table
+        -- nvim-treesitter `main` branch: parsers is a `lang -> config` table. Install
+        -- and update reload that module and then fire `User TSUpdate`, so an entry
+        -- set only here is gone by the time the installer looks for it.
         ---@diagnostic disable-next-line: inject-field
         parsers.fix = config
+        vim.api.nvim_create_autocmd("User", {
+            pattern = "TSUpdate",
+            callback = function()
+                ---@diagnostic disable-next-line: inject-field
+                require("nvim-treesitter.parsers").fix = config
+            end,
+        })
     end
 end
 

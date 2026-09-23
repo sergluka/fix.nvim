@@ -62,6 +62,53 @@ T["a message wrong in both places gets both diagnostics"] = function()
     MiniTest.expect.equality({ diagnostics[1].code, diagnostics[2].code }, { "body_length", "checksum" })
 end
 
+T["a zero-padded BodyLength is summed as written"] = function()
+    load("padded-bodylength.fix")
+    MiniTest.expect.equality(#H.get_diagnostics(nvim()), 0)
+end
+
+T["a separator inside a value is text, not a field boundary"] = function()
+    load("pipe-in-value.fix")
+    MiniTest.expect.equality(#H.get_diagnostics(nvim()), 0)
+end
+
+-- What a parser without the in-value separator rule (or a cache it filled)
+-- leaves behind: the fields around the text it skipped.
+T["a message parsed with skipped text is neither verified nor repaired"] = function()
+    -- Keep an earlier case's clean parse of the same file from replacing the seed.
+    setup([[{ cache = { persist = { enabled = false } } }]])
+    nvim().lua([[
+        local line = vim.fn.readfile("tests/integration/fixtures/validation/pipe-in-value.fix")[1]
+        local fields, col = {}, 0
+        for segment in line:gmatch("([^|]*)|") do
+            local tag, value = segment:match("^(%d+)=(.*)$")
+            if tag then
+                fields[#fields + 1] = require("fix.field").new({
+                    index = #fields + 1,
+                    tag = tonumber(tag),
+                    value = value,
+                    tag_start = col,
+                    tag_end = col + #tag,
+                    value_start = col + #tag + 1,
+                    value_end = col + #segment,
+                })
+            end
+            col = col + #segment + 1
+        end
+        require("fix.cache").put_semantic(require("fix.cache").key(line), { version = "FIX.4.4", fields = fields })
+    ]])
+    load("pipe-in-value.fix")
+
+    local diagnostics = H.get_diagnostics(nvim())
+    MiniTest.expect.equality(#diagnostics, 1)
+    MiniTest.expect.equality(
+        diagnostics[1].message,
+        "Cannot verify BodyLength and CheckSum: the message does not parse cleanly"
+    )
+    MiniTest.expect.equality(diagnostics[1].severity, vim.diagnostic.severity.WARN)
+    MiniTest.expect.equality(#H.code_actions(nvim(), 0), 0)
+end
+
 T["SOH-delimited logs validate like pipe-delimited ones"] = function()
     load("soh.fix")
     local diagnostics = H.get_diagnostics(nvim())

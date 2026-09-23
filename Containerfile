@@ -17,14 +17,13 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# (a) Compile tree-sitter-fix into fix.so.
+# (a) Compile tree-sitter-fix master into fix.so; the plugin tracks master, not a release.
 RUN set -eux; \
-    git clone https://github.com/sergluka/tree-sitter-fix /src/tree-sitter-fix; \
-    git -C /src/tree-sitter-fix checkout bd20b510945dde4ecd2213e52b63f9c2a18a3d04; \
+    git clone --depth 1 --branch master https://github.com/sergluka/tree-sitter-fix /src/tree-sitter-fix; \
     cd /src/tree-sitter-fix; \
     if [ -f grammar.js ] && [ ! -f src/parser.c ]; then tree-sitter generate; fi; \
     mkdir -p /out; \
-    cc -O2 -shared -fPIC -Isrc src/parser.c -o /out/fix.so
+    cc -O2 -shared -fPIC -Isrc src/parser.c src/scanner.c -o /out/fix.so
 
 # (b) Bake Lua dependencies — git clone + checkout + prune .git.
 # SHAs are inlined below; updating any pin is a one-line edit.

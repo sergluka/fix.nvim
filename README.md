@@ -708,8 +708,8 @@ because there is no URI that maps back to them; save the buffer to get them.
 ## Development
 
 Integration tests run inside a Podman container. The image includes Neovim, the
-`tree-sitter-fix` parser, and all Lua dependencies at pinned commit SHAs, so
-tests do not need network access at runtime.
+`tree-sitter-fix` parser built from its `master` branch, and all Lua dependencies
+at pinned commit SHAs, so tests do not need network access at runtime.
 
 ```sh
 # Build the image on first run and execute the full suite.

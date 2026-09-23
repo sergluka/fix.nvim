@@ -53,6 +53,24 @@ local function separator_of(line, fields)
     return SEPARATORS[tail] and tail or "|"
 end
 
+--- The first span the parser skipped over, i.e. text that is neither a field nor
+--- a single separator. Sums over such a message count the wrong bytes, and a
+--- repair would write into whatever the parser mistook for tag 9 or 10.
+---@param line string
+---@param fields Field[]
+---@return number|nil col, number|nil end_col
+local function skipped_span(line, fields)
+    for i, field in ipairs(fields) do
+        if not line:sub(field.tag_end + 1, field.value_start):match("^[ \t]*=$") then
+            return field.tag_end, field.value_start
+        end
+        local next_field = fields[i + 1]
+        if next_field and not line:sub(field.value_end + 1, next_field.tag_start):match("^[ \t]*[\1|^][ \t]*$") then
+            return field.value_end, next_field.tag_start
+        end
+    end
+end
+
 ---@class FixIntegrityPlan
 ---@field fields Field[]
 ---@field i8? number
@@ -61,6 +79,7 @@ end
 ---@field body_length number    expected BodyLength
 ---@field checksum string       expected CheckSum, always three digits
 ---@field fix? FixFix           canonical repair, shared by both rules; nil when nothing to repair
+---@field skipped? {col: number, end_col: number}  set instead of the sums when the parse skipped text
 
 ---@param ctx FixRuleCtx
 ---@return FixIntegrityPlan|nil
@@ -69,6 +88,10 @@ local function build(ctx)
     local fields = ctx.message:list_fields()
     if #fields < 2 then
         return nil
+    end
+    local skipped_col, skipped_end = skipped_span(line, fields)
+    if skipped_col then
+        return { fields = fields, skipped = { col = skipped_col, end_col = skipped_end } }
     end
 
     local i8, i9, i10
@@ -103,6 +126,8 @@ local function build(ctx)
     -- CheckSum covers everything up to the separator before tag 10, with the
     -- corrected BodyLength substituted in: a message whose BodyLength is wrong
     -- has no meaningful checksum other than the one it will have once repaired.
+    -- A value equal to the computed one (e.g. zero-padded) is not repaired, so it is summed as written.
+    local repair_9 = i9 and tonumber(fields[i9].value) ~= body_length
     local missing_9_bytes = 0
     if not i9 then
         missing_9_bytes = str_sum("9=") + str_sum(body_text) + SEPARATOR
@@ -113,7 +138,7 @@ local function build(ctx)
             sum = sum + missing_9_bytes
         end
         local field = fields[i]
-        if i == i9 then
+        if i == i9 and repair_9 then
             sum = sum + byte_sum(line, field.tag_start + 1, field.value_start) + str_sum(body_text)
         else
             sum = sum + byte_sum(line, field.tag_start + 1, field.value_end)
@@ -198,6 +223,25 @@ end
 
 --- The shared diagnostic shape of both rules: a missing tag is anchored on
 --- `anchor`, a wrong value on its own value span.
+--- Both rules share one diagnostic for a message they cannot check; whichever runs first reports it.
+---@param ctx FixRuleCtx
+---@param p FixIntegrityPlan
+---@return FixRuleDiagnostic[]|nil
+local function report_skipped(ctx, p)
+    if ctx.scratch.integrity_skipped_reported then
+        return nil
+    end
+    ctx.scratch.integrity_skipped_reported = true
+    return {
+        {
+            col = p.skipped.col,
+            end_col = p.skipped.end_col,
+            message = "Cannot verify BodyLength and CheckSum: the message does not parse cleanly",
+            severity = vim.diagnostic.severity.WARN,
+        },
+    }
+end
+
 ---@param p FixIntegrityPlan
 ---@param field Field|nil
 ---@param anchor Field
@@ -238,6 +282,9 @@ M.body_length = {
         if not p then
             return nil
         end
+        if p.skipped then
+            return report_skipped(ctx, p)
+        end
         local field = p.i9 and p.fields[p.i9] or nil
         local matches = field ~= nil and tonumber(field.value) == p.body_length
         return report(p, field, p.fields[p.i8 or 1], "BodyLength", FixTag.BodyLength, tostring(p.body_length), matches)
@@ -251,6 +298,9 @@ M.checksum = {
         local p = plan(ctx)
         if not p then
             return nil
+        end
+        if p.skipped then
+            return report_skipped(ctx, p)
         end
         local field = p.i10 and p.fields[p.i10] or nil
         local matches = field ~= nil and field.value == p.checksum

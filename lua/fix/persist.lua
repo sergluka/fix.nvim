@@ -6,7 +6,8 @@ local Overrides = require("fix.overrides")
 local M = {}
 
 -- 3: group instances carry `count_index`.
-local FORMAT_VERSION = 3
+-- 4: tree-sitter-fix keeps a separator inside a value as text.
+local FORMAT_VERSION = 4
 
 -- Set on the first filesystem failure; persistence stays off for the session.
 M._disabled = false
