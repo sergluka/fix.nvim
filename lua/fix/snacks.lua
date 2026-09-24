@@ -4,7 +4,7 @@ local document = require("fix.document")
 local M = {}
 local FixTag = Consts.FixTag
 
-local function append_message_items(items, message, message_idx, file)
+local function append_message_items(items, message, message_idx, buf, file)
     local msg_type = message:field(FixTag.MsgType).value_text
     local sender = message:field(FixTag.SenderCompID).value
     local seq_no = message:field(FixTag.MsgSeqNum).value
@@ -28,6 +28,8 @@ local function append_message_items(items, message, message_idx, file)
             message = message,
             field = field,
             lineno = message.lineno,
+            -- buf lets snacks preview unnamed and modified buffers
+            buf = buf,
             file = file,
             pos = { message.lineno + 1, field.tag_start },
             end_pos = { message.lineno + 1, field.value_end },
@@ -44,6 +46,9 @@ function M.open()
 
     local buf = vim.api.nvim_get_current_buf()
     local file = vim.api.nvim_buf_get_name(buf)
+    if file == "" then
+        file = nil
+    end
     local chunk = require("fix").opts.render.lines_per_batch
 
     local items = {}
@@ -56,7 +61,7 @@ function M.open()
         while lnum < stop do
             local message = document.build_line(buf, lnum)
             if message then
-                append_message_items(items, message, message_idx, file)
+                append_message_items(items, message, message_idx, buf, file)
                 message_idx = message_idx + 1
             end
             lnum = lnum + 1

@@ -43,4 +43,30 @@ T["picker"]["opens immediately on cold cache and streams to full count"] = funct
     MiniTest.expect.equality(ok, true)
 end
 
+T["picker"]["previews an unnamed buffer"] = function()
+    local nvim = Helpers.nvim()
+    nvim.lua([[
+        require("fix").setup({})
+        local f = io.open("tests/integration/fixtures/4.4.fix", "r")
+        local line = f:read("*l")
+        while line == "" do line = f:read("*l") end
+        f:close()
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, { line })
+        vim.bo.filetype = "fix"
+        _G._source_line = line
+    ]])
+    nvim.cmd("FIX picker")
+    local ok = Helpers.wait_for(
+        nvim,
+        [[(function()
+            local p = require("snacks.picker").get()[1]
+            local win = p and p.preview and p.preview.win
+            if not (win and win.buf and vim.api.nvim_buf_is_valid(win.buf)) then return false end
+            return vim.api.nvim_buf_get_lines(win.buf, 0, 1, false)[1] == _G._source_line
+        end)()]],
+        5000
+    )
+    MiniTest.expect.equality(ok, true)
+end
+
 return T
