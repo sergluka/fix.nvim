@@ -69,4 +69,54 @@ T["picker"]["previews an unnamed buffer"] = function()
     MiniTest.expect.equality(ok, true)
 end
 
+-- Buffer of `count` copies of the first 4.4 message, cursor on the start of the
+-- 5th field of line `row`; picker opened right away.
+local function open_on_field(nvim, count, row, lines_per_batch)
+    nvim.lua(
+        [[
+        local count, row, lines_per_batch = ...
+        require("fix").setup({ render = { lines_per_batch = lines_per_batch } })
+        local f = io.open("tests/integration/fixtures/4.4.fix", "r")
+        local line = f:read("*l")
+        while line == "" do line = f:read("*l") end
+        f:close()
+        local lines = {}
+        for i = 1, count do lines[i] = line end
+        vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+        vim.bo.filetype = "fix"
+        local field = require("fix.document").build_line(0, row - 1):list_fields()[5]
+        _G._target = { lineno = row - 1, index = field.index }
+        -- one byte into the value, so the lookup must map a column inside the field
+        vim.api.nvim_win_set_cursor(0, { row, field.value_start + 1 })
+    ]],
+        { count, row, lines_per_batch }
+    )
+    nvim.cmd("FIX picker")
+end
+
+local function wait_focused(nvim)
+    return Helpers.wait_for(
+        nvim,
+        [[(function()
+            local p = require("snacks.picker").get()[1]
+            local item = p and p.list and p:current()
+            return item ~= nil and item.lineno == _G._target.lineno
+                and item.field.index == _G._target.index
+        end)()]],
+        15000
+    )
+end
+
+T["picker"]["focuses the field under the cursor"] = function()
+    local nvim = Helpers.nvim()
+    open_on_field(nvim, 10, 7, 500)
+    MiniTest.expect.equality(wait_focused(nvim), true)
+end
+
+T["picker"]["focuses the field under the cursor beyond the first chunk"] = function()
+    local nvim = Helpers.nvim()
+    open_on_field(nvim, 300, 200, 50)
+    MiniTest.expect.equality(wait_focused(nvim), true)
+end
+
 return T

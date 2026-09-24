@@ -37,6 +37,22 @@ local function append_message_items(items, message, message_idx, buf, file)
     end
 end
 
+-- The last field starting at or before `col`, so a cursor on a separator or
+-- inside a value picks the field it belongs to.
+---@param message Message
+---@param col number
+---@return number
+local function field_at(message, col)
+    local found = 1
+    for i, field in ipairs(message:list_fields()) do
+        if field.tag_start > col then
+            break
+        end
+        found = i
+    end
+    return found
+end
+
 function M.open()
     local ok, snacks = pcall(require, "snacks")
     if not ok then
@@ -50,10 +66,15 @@ function M.open()
         file = nil
     end
     local chunk = require("fix").opts.render.lines_per_batch
+    local cursor = vim.api.nvim_win_get_cursor(0)
+    local cursor_lnum = cursor[1] - 1
 
     local items = {}
     local message_idx = 0
     local lnum = 0
+    -- List position of the field under the cursor. Items arrive sorted by
+    -- `index`, so with an empty pattern it equals the position in `items`.
+    local target
 
     local function append_chunk()
         local line_count = vim.api.nvim_buf_line_count(buf)
@@ -61,6 +82,9 @@ function M.open()
         while lnum < stop do
             local message = document.build_line(buf, lnum)
             if message then
+                if lnum == cursor_lnum then
+                    target = #items + field_at(message, cursor[2])
+                end
                 append_message_items(items, message, message_idx, buf, file)
                 message_idx = message_idx + 1
             end
@@ -72,6 +96,14 @@ function M.open()
     -- First chunk synchronously so the picker opens with content (cache hits
     -- make this near-instant on warmed buffers).
     local more = append_chunk()
+
+    -- list:view keeps the position as a pending target until the matcher
+    -- has delivered that many items.
+    local function focus_target(p)
+        local list = p.list
+        local top = math.max(1, target - math.floor(list:height() / 2))
+        list:view(target, top)
+    end
 
     local picker = snacks.picker({
         title = "FIX fields",
@@ -108,6 +140,12 @@ function M.open()
             fields = { "index" },
         },
 
+        on_show = function(p)
+            if target then
+                focus_target(p)
+            end
+        end,
+
         confirm = function(p, item)
             p:close()
             if item then
@@ -121,7 +159,12 @@ function M.open()
         if picker.closed or not vim.api.nvim_buf_is_valid(buf) then
             return
         end
+        local found = target ~= nil
         local has_more = append_chunk()
+        -- Focus late only while the user hasn't moved or typed yet.
+        if not found and target and picker.list.cursor == 1 and picker.input.filter.pattern == "" then
+            focus_target(picker)
+        end
         -- items is the live table the default finder re-reads; find() re-runs it
         picker:find({ refresh = true })
         if has_more then
