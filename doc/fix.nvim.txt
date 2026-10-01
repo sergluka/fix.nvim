@@ -242,7 +242,7 @@ These are the defaults:
         },
         title = {
           enabled = true,
-          position = "above", -- "above" | "below" | "front" | "replace" | "replace_front"
+          position = "above", -- "above" | "below" | "front"
           route = {
             enabled = true,
             mode = "direction", -- "direction" | "sender" | "pair"
@@ -398,11 +398,10 @@ buffer warms the parse/decode cache in `lines_per_batch` chunks.
 Off-screen extmarks are not kept around. Annotations are re-applied as you
 scroll, which keeps large buffers responsive.
 
-Set `annotate.title.position = "replace"` to conceal each FIX message line
-and show the formatted message title in its place. This mode uses Neovim
-conceal, so FIX buffers set `conceallevel=2`. Use `"replace_front"` to keep
-other lines replaced while showing the active line as raw FIX with normal field
-annotations and the title at the front.
+The former `annotate.title.position` values `"replace"` and `"replace_front"`
+were removed: Neovim keeps a concealed line's full wrapped height
+(neovim/neovim#14409), which left blank rows under every title. They are still
+accepted for one release and mapped to `"above"` and `"front"` with a warning.
 
                                                    *fix.nvim-validation*
 Validation runs as a language server inside Neovim, started on demand; nothing
@@ -494,23 +493,7 @@ Example mapping:
 >lua
     vim.keymap.set("n", "K", vim.lsp.buf.hover, { buffer = true })
 <
-Diagnostic display is not configured here; use |vim.diagnostic.config()| — with
-one exception. With `annotate.title.position` set to `"replace"` or
-`"replace_front"` the message line is concealed, which leaves it no display
-width for virtual text to attach to: |vim.diagnostic| would drop its text onto
-the row below, or lose it entirely. In those positions the message title
-carries the diagnostics itself, drawn right after it:
->
-    20251026-09:00:02 CLIENT1=>BROKER1 NewOrderSingle   ■ CheckSum is 001, expected 213
-<
-Severity picks the highlight group, `DiagnosticVirtualTextError` and friends.
-
-Where that happens, `virtual_text` is switched off for this plugin's diagnostic
-namespace so the same message is not drawn twice; the global
-|vim.diagnostic.config()| and every other language server are untouched. On the
-revealed cursor line in `"replace_front"` the raw message is visible, so
-`virtual_text` keeps working there and diagnostics render normally. Underlines
-are invisible on a concealed line either way; the sign column still works.
+Diagnostic display is not configured here; use |vim.diagnostic.config()|.
 
 A buffer with no file name gets code actions but no diagnostics: its document
 URI is `file://`, which does not map back to the buffer. Write the buffer to a
@@ -804,7 +787,7 @@ displayed. If the first message title is hidden, use one of these workarounds:
 
 - Add an empty line at the beginning of the file.
 - Press `<C-b>` after opening the file.
-- Set `annotate.title.position = "below"`, `"front"`, `"replace"`, or `"replace_front"`.
+- Set `annotate.title.position = "below"` or `"front"`.
 
                                           *fix.nvim-limitations-editorconfig*
 Opening a `.editorconfig` file reports >

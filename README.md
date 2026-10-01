@@ -11,7 +11,7 @@ Before using this plugin, consider the following known Neovim limitations:
 
 - <a id="long-fix-line-annotations"></a>On long FIX lines an annotation can be split mid-word across two screen rows, and cursor motions (`w`, `e`, …) may then appear to land inside a label. This is a Neovim bug, not specific to this plugin — see [neovim/neovim#35341](https://github.com/neovim/neovim/issues/35341). Workaround: use `:setlocal nowrap` in FIX buffers and scroll horizontally, or disable field annotations entirely (`annotate.{tag,value}.enabled = false`). You can still explore fields with the [FIX message tree](#fix-message-tree) or `:FIX picker`.
 - Virtual lines above the first buffer line are not displayed ([neovim/neovim#16166](https://github.com/neovim/neovim/issues/16166)). Workaround: avoid `annotate.title.position = "above"`.
-- A FIX message is one very long line: with `wrap` on it spans several screen rows, so a diagnostic float — which `[d` opens when the mapping passes `float = true`, as LazyVim's does — lands on that line's own wrapped continuation and reads as garbled text. A float and `virtual_text` always show the same diagnostic twice; short lines hide that, and in the concealed title positions `virtual_text` is narrowed to the cursor line, so the two always coincide. Workaround: `:setlocal nowrap` as above, drop `float = true` from the mapping, or set `vim.diagnostic.config({ virtual_text = false })` and let the titles carry the diagnostics.
+- A FIX message is one very long line: with `wrap` on it spans several screen rows, so a diagnostic float — which `[d` opens when the mapping passes `float = true`, as LazyVim's does — lands on that line's own wrapped continuation and reads as garbled text. A float and `virtual_text` always show the same diagnostic twice; short lines hide that. Workaround: `:setlocal nowrap` as above, drop `float = true` from the mapping, or set `vim.diagnostic.config({ virtual_text = false })`.
 - Opening a `.editorconfig` file errors with `E5108: … invalid key: 21` from Neovim's own `syntax/editorconfig.vim`, and its property names lose their highlighting. That file passes every registered property name to `vim.cmd.syntax{…}`, which silently caps positional arguments at 20, so it breaks once more than 18 properties exist — Neovim ships 10 and this plugin adds 13 for [per-buffer overrides](#per-buffer-overrides). It affects only the highlighting of `.editorconfig` files themselves; FIX buffers and the overrides are unaffected — see [neovim/neovim#41314](https://github.com/neovim/neovim/issues/41314). Workaround: none needed unless the highlighting matters to you, in which case drop the plugin's `editorconfig` support by removing the `fix_*` property registration in `plugin/fix.lua`.
 - On very large files, Neovim's tree-sitter highlighting can freeze the UI when jumping into unparsed regions. Disable highlighting for those buffers with `:lua vim.treesitter.stop(0)`, or let your distribution's big-file protection handle it.
 
@@ -30,7 +30,7 @@ buffer. They are disabled by default because of [Nvim limitation](#long-fix-line
 annotation can split across screen rows and disrupt cursor motions. The screenshot shows them enabled.
 
 Message titles remain enabled by default. They summarize each message, color
-its session route, and can surround, prefix, or replace the raw line.
+its session route, and can surround or prefix the raw line.
 
 ![Decoded FIX annotations, message titles, and route colors](./media/annotations.png)
 
@@ -250,7 +250,7 @@ cache speeds up later sessions; `:FIX cache clear` resets the current file.
 | Command | Lua API | Description |
 | --- | --- | --- |
 | `:FIX --help` | | Show command help |
-| `:FIX annotations [all|tag|value|title|message|group]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
+| `:FIX annotations [all | tag | value | title | message | group]` | `require("fix").annotate_toggle(scope)` | Toggle all annotations or one annotation scope (`message` is a legacy alias for `title`) |
 | `:FIX picker` | `require("fix.snacks").open()` | Open the fields picker |
 | `:FIX tree` | `require("fix.neo_tree").open()` | Open the FIX message tree |
 | `:FIX browse` | `require("fix").browse_tag_online()` | Open the Onixs documentation page for the tag under the cursor |
@@ -312,7 +312,7 @@ examples.
   annotate = {
     title = {
         enabled = true,
-        position = "replace_front", -- "above" | "below" | "front" | "replace" | "replace_front"
+        position = "front", -- "above" | "below" | "front"
         route = {
           enabled = true,
           mode = "direction", -- "direction" | "sender" | "pair"
@@ -446,6 +446,11 @@ examples.
   },
 }
 ```
+
+The former `annotate.title.position` values `"replace"` and `"replace_front"` were removed: Neovim keeps a
+concealed line's full wrapped height ([neovim/neovim#14409](https://github.com/neovim/neovim/issues/14409)),
+which left blank rows under every title. They are still accepted for one release and mapped to `"above"` and
+`"front"` with a warning.
 
 ### Keybindings
 
@@ -683,26 +688,9 @@ diagnostics; `:FIX lsp toggle` (or `lsp.enabled = false`) turns the whole
 subsystem off.
 
 Diagnostic display is not configured here; use `vim.diagnostic.config()` as you
-would for any other server — with one exception. With
-`annotate.title.position = "replace"` or `"replace_front"` the message line is
-concealed, which leaves it no display width for virtual text to attach to:
-`vim.diagnostic` would drop its text onto the row below, or lose it entirely.
-In those positions the message title carries the diagnostics itself, drawn
-right after it:
+would for any other server.
 
-```
-20251026-09:00:02 CLIENT1=>BROKER1 NewOrderSingle Buy 10 BTCUSD   ■ CheckSum is 001, expected 213
-```
-
-Where that happens, `virtual_text` is switched off for this plugin's diagnostic
-namespace so the same message is not drawn twice — your global
-`vim.diagnostic.config()` and every other language server are untouched. On the
-revealed cursor line in `replace_front` the raw message is visible, so
-`virtual_text` keeps working there and the diagnostics render normally.
-Underlines are invisible on a concealed line either way; the sign column still
-works.
-
-One more caveat: buffers with no file name get code actions but no diagnostics,
+One caveat: buffers with no file name get code actions but no diagnostics,
 because there is no URI that maps back to them; save the buffer to get them.
 
 ## Development

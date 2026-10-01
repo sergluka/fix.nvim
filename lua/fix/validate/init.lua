@@ -33,8 +33,6 @@ local PUBLISH_THROTTLE_MS = 150
 ---@field debounce_timer? uv.uv_timer_t
 ---@field publish_timer? uv.uv_timer_t
 ---@field dirty boolean
----@field touched_first? number  0-based span of lines whose diagnostics changed
----@field touched_last? number   since the last publish
 ---@field validating boolean     mirrors validating(buf) as of the last sync; edge-detects a mid-session flip
 
 local states = {} ---@type table<number, FixValidateState>
@@ -141,113 +139,6 @@ local function validate_line(buf, lnum, line)
     return diagnostics, ctx, true
 end
 
---- Repaint the viewport when message titles carry diagnostics: the renderer
---- walks the buffer independently and will have painted these lines before the
---- validator ever reached them. With a span, the repaint is skipped while the
---- change is entirely off-screen — a background walk would otherwise re-hash
---- the viewport on every publish tick.
----@param buf number
----@param first? number 0-based inclusive; nil repaints unconditionally
----@param last? number 0-based inclusive
-local function refresh_titles(buf, first, last)
-    local render = package.loaded["fix.render"]
-    if not (render and render.diagnostics_in_title(buf)) then
-        return
-    end
-    if first then
-        for _, range in ipairs(Scan.viewport_ranges(buf)) do
-            if first < range[2] and last >= range[1] then
-                render.refresh_viewport(buf)
-                return
-            end
-        end
-        return
-    end
-    render.refresh_viewport(buf)
-end
-
---- Record that a line's diagnostics changed, for the next publish's repaint.
----@param state FixValidateState
----@param lnum number 0-based
----@param diagnostics FixDiagnostic[]|nil
-local function store_line(state, lnum, diagnostics)
-    local slot = lnum + 1
-    if state.entries[slot] ~= nil or diagnostics ~= nil then
-        if not state.touched_first or lnum < state.touched_first then
-            state.touched_first = lnum
-        end
-        if not state.touched_last or lnum > state.touched_last then
-            state.touched_last = lnum
-        end
-    end
-    state.entries[slot] = diagnostics
-end
-
---- The virtual text `vim.diagnostic` renders itself, narrowed to the lines the
---- title did not take over. Only our own namespace is touched, so other servers
---- and the global config are unaffected.
----@param namespace number
----@param bufnr number
----@return vim.diagnostic.Opts.VirtualText|false
-local function current_line_virtual_text(namespace, bufnr)
-    local configured = vim.diagnostic.config().virtual_text
-    if type(configured) == "function" then
-        configured = configured(namespace, bufnr)
-    end
-    if not configured then
-        return false
-    end
-    -- Narrow rather than replace: whatever prefix, format or severity filter is
-    -- configured stays, and a later change to it still comes through.
-    local narrowed = type(configured) == "table" and vim.deepcopy(configured) or {}
-    narrowed.current_line = true
-    return narrowed
-end
-
---- One client, one namespace, many buffers with different effective title
---- positions — so the namespace's (global) `virtual_text` is a resolver
---- deciding per buffer at render time, not a value frozen by the last caller.
----@param namespace number
----@param bufnr number
----@return vim.diagnostic.Opts.VirtualText|false
-local function resolve_virtual_text(namespace, bufnr)
-    local render = package.loaded["fix.render"]
-    local position = render and render.diagnostics_in_title(bufnr)
-    if position == "replace" then
-        return false
-    elseif position == "replace_front" then
-        return current_line_virtual_text(namespace, bufnr)
-    end
-    local configured = vim.diagnostic.config().virtual_text
-    if type(configured) == "function" then
-        return configured(namespace, bufnr)
-    end
-    return configured
-end
-
---- Where the title carries the diagnostics, the stock virtual text would draw
---- them a second time — inline, over the very title they were drawn into. Turn
---- it off, but only for our own namespace. `replace_front` reveals the cursor
---- line, and there the raw message is visible and the stock rendering works, so
---- keep it for that one line.
-local function configure_virtual_text()
-    local ns = Lsp.namespace()
-    if not ns then
-        return
-    end
-
-    -- Assigning through the namespace table is the only way to drop a key
-    -- again if this ever needs to change; vim.diagnostic.config() can only
-    -- add or overwrite. The empty config call re-renders what is on screen.
-    vim.diagnostic.get_namespace(ns).opts.virtual_text = resolve_virtual_text
-    vim.diagnostic.config({}, ns)
-end
-
---- Re-consult `resolve_virtual_text` now, for every buffer showing our
---- diagnostics. A presentation-only override like `annotate.title.position`
---- changes what it decides without a publish, and nothing else re-renders.
-M.refresh_virtual_text = configure_virtual_text
-
 ---@param buf number
 local function publish_now(buf)
     local state = states[buf]
@@ -268,12 +159,6 @@ local function publish_now(buf)
         end
     end
     Lsp.publish(buf, diagnostics)
-
-    local first, last = state.touched_first, state.touched_last
-    state.touched_first, state.touched_last = nil, nil
-    if first then
-        refresh_titles(buf, first, last)
-    end
 end
 
 ---@param buf number
@@ -310,7 +195,7 @@ local function validate_walk(buf, state)
                 if not authoritative then
                     return false
                 end
-                store_line(state, lnum, diagnostics)
+                state.entries[lnum + 1] = diagnostics
             end
             publish_soon(buf)
         end,
@@ -401,7 +286,6 @@ function M.attach(buf)
     states[buf] = state
 
     Lsp.ensure_client(buf)
-    configure_virtual_text()
 
     vim.api.nvim_buf_attach(buf, false, {
         on_lines = function(_, b, _, first, last_old, last_new)
@@ -458,8 +342,6 @@ function M.detach(buf)
     Scan.close_timer(state.debounce_timer)
     Scan.close_timer(state.publish_timer)
     Lsp.clear(buf)
-    -- Titles that embedded these diagnostics have to drop them again.
-    refresh_titles(buf)
 end
 
 --- Re-run every rule over a buffer; used when the rule set changes.
@@ -511,9 +393,7 @@ function M.sync(buf)
     else
         state.walk:cancel() -- a walk mid-tick would otherwise repopulate entries right after
         state.entries = {}
-        state.touched_first, state.touched_last = nil, nil
         Lsp.publish(buf, {})
-        refresh_titles(buf)
     end
 end
 
@@ -570,19 +450,9 @@ function M.refresh_line(buf, lnum)
     local diagnostics, ctx, authoritative = validate_line(buf, lnum)
     local state = states[buf]
     if state and authoritative then
-        store_line(state, lnum, diagnostics)
+        state.entries[lnum + 1] = diagnostics
     end
     return diagnostics, ctx
-end
-
---- A line's stored diagnostics. The table is replaced on every revalidation, so
---- callers may use its identity to detect a change.
----@param buf number
----@param lnum number 0-based
----@return FixDiagnostic[]|nil
-function M.diagnostics_for(buf, lnum)
-    local state = states[buf]
-    return state and state.entries[lnum + 1] or nil
 end
 
 --- Lines that currently hold diagnostics, ascending, optionally within a range.

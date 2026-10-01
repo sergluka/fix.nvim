@@ -10,6 +10,7 @@ local M = {}
 ---@field category "annotate"|"lsp"|"dictionary"
 ---@field content? boolean        true when the key feeds the cache namespace suffix
 ---@field values? string[]        enum kind only
+---@field legacy? table<string, string>  enum kind only: removed values, mapped to their replacement with a warning
 ---@field namespace? "tag"|"value"|"title"  formatter kind only
 ---@field target? string          formatter kind only: the FixOpts path the resolved fn is placed at
 ---@field parts string[]          precomputed path split, for nested lookups and overlay writes
@@ -24,7 +25,11 @@ M.SPEC = {
         path = "annotate.title.position",
         var = "fix_annotate_title_position",
         kind = "enum",
-        values = { "above", "below", "front", "replace", "replace_front" },
+        values = { "above", "below", "front" },
+        -- The concealed positions were dropped: Neovim keeps a concealed line's
+        -- full wrapped height (neovim#14409), leaving blank rows under each title.
+        -- TODO: remove `legacy`, `M.legacy_value` and its callers after 2027-01-01.
+        legacy = { replace = "above", replace_front = "front" },
         category = "annotate",
     },
     {
@@ -100,5 +105,13 @@ end
 
 M.LAYER_ORDER = { "modeline", "vim.b", "editorconfig", "vim.g" }
 M.LAYER_ORDER_NO_MODELINE = { "vim.b", "editorconfig", "vim.g" }
+
+--- The replacement for a removed enum value; nil when `value` is not legacy.
+---@param entry FixOverrideSpecEntry
+---@param value any
+---@return string|nil
+function M.legacy_value(entry, value)
+    return entry.legacy and entry.legacy[value] or nil
+end
 
 return M

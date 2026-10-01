@@ -490,6 +490,18 @@ T["setup dictionaries can satisfy fallback_version"] = function()
     H.expect_inline_label(nvim(), "MODE_BETA")
 end
 
+T["setup maps legacy title position replace to above with a warning"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "replace" } } })]])
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.title.position]]), "above")
+    H.expect_notified(nvim(), "deprecated")
+end
+
+T["setup maps legacy title position replace_front to front with a warning"] = function()
+    nvim().lua([[require("fix").setup({ annotate = { title = { position = "replace_front" } } })]])
+    MiniTest.expect.equality(nvim().lua_get([[require("fix").opts.annotate.title.position]]), "front")
+    H.expect_notified(nvim(), "deprecated")
+end
+
 T["setup dictionaries rejects invalid mode"] = function()
     local err = nvim().lua_get([[
         select(2, pcall(function()

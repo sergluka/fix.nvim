@@ -156,6 +156,11 @@ function M.resolve_value(entry, value, layer)
         end
         return true, value
     elseif entry.kind == "enum" then
+        -- TODO: remove the legacy mapping after 2027-01-01 (see Spec.legacy_value).
+        local replacement = Spec.legacy_value(entry, value)
+        if replacement then
+            return true, replacement
+        end
         if type(value) ~= "string" or not vim.tbl_contains(entry.values, value) then
             return false,
                 string.format("must be one of %s, got %s", table.concat(entry.values, "|"), vim.inspect(value))
@@ -225,6 +230,10 @@ function M.resolve_entry(entry, buf, state, warnings, layers)
             if usable then
                 local ok, result = M.resolve_value(entry, value, layer)
                 if ok then
+                    -- TODO: remove with the legacy mapping after 2027-01-01.
+                    if Spec.legacy_value(entry, value) then
+                        M.record_warning(warnings, buf, layer, entry.path, value, "deprecated, use " .. result)
+                    end
                     return { value = result, layer = layer }
                 end
                 M.record_warning(warnings, buf, layer, entry.path, raw, result)

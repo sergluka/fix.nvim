@@ -288,15 +288,6 @@ function M.ensure_client(buf)
     return id
 end
 
---- The namespace our diagnostics land in, once the client is running.
----@return number|nil
-function M.namespace()
-    if not client_id or not vim.lsp.get_client_by_id(client_id) then
-        return nil
-    end
-    return vim.lsp.diagnostic.get_namespace(client_id, false)
-end
-
 --- Replace this buffer's diagnostics, the way any language server does. Going
 --- through the client rather than `vim.diagnostic.set` is what fills in the
 --- bookkeeping the rest of `vim.lsp` reads back, `user_data.lsp` above all.

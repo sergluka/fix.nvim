@@ -114,40 +114,6 @@ function M.payload_for(message, key, opts)
     return payload
 end
 
-local DIAGNOSTIC_HIGHLIGHTS = {
-    [vim.diagnostic.severity.ERROR] = "DiagnosticVirtualTextError",
-    [vim.diagnostic.severity.WARN] = "DiagnosticVirtualTextWarn",
-    [vim.diagnostic.severity.INFO] = "DiagnosticVirtualTextInfo",
-    [vim.diagnostic.severity.HINT] = "DiagnosticVirtualTextHint",
-}
-
---- A concealed line has no display width, so `eol` virtual text has nothing to
---- anchor to and diagnostics would land on the row below, or nowhere at all.
---- Appending them to the title overlay draws them right after the message.
----@param virt_text FixTreeFormatterChunk[]
----@param diagnostics FixDiagnostic[]|nil
----@return FixTreeFormatterChunk[]
-local function with_diagnostics(virt_text, diagnostics)
-    if diagnostics == nil or #diagnostics == 0 then
-        return virt_text
-    end
-
-    -- The title belongs to the cached payload and must not be extended in place.
-    local combined = {}
-    vim.list_extend(combined, virt_text)
-    combined[#combined + 1] = { "   " }
-    for index, diagnostic in ipairs(diagnostics) do
-        if index > 1 then
-            combined[#combined + 1] = { "  " }
-        end
-        combined[#combined + 1] = {
-            "■ " .. diagnostic.message,
-            DIAGNOSTIC_HIGHLIGHTS[diagnostic.severity] or DIAGNOSTIC_HIGHLIGHTS[vim.diagnostic.severity.ERROR],
-        }
-    end
-    return combined
-end
-
 local function apply_title(bufnr, ns_id, lnum, title, position)
     if position == "front" then
         local virt_text = title[1]
@@ -172,36 +138,15 @@ end
 ---@param bufnr number
 ---@param ns_id number
 ---@param lnum number 0-based
----@param line_text string
 ---@param payload FixRenderPayload|nil
----@param front_line? boolean
----@param diagnostics? FixDiagnostic[] shown after the title in the replace positions
-function M.apply(opts, bufnr, ns_id, lnum, line_text, payload, front_line, diagnostics)
+function M.apply(opts, bufnr, ns_id, lnum, payload)
     vim.api.nvim_buf_clear_namespace(bufnr, ns_id, lnum, lnum + 1)
     if payload == nil then
         return
     end
 
     if opts.annotate.title.enabled and payload.title then
-        if opts.annotate.title.position == "replace" or opts.annotate.title.position == "replace_front" then
-            if not front_line then
-                local virt_text = payload.title[1]
-                if virt_text then
-                    vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
-                        end_col = #line_text,
-                        conceal = "",
-                    })
-                    vim.api.nvim_buf_set_extmark(bufnr, ns_id, lnum, 0, {
-                        virt_text = with_diagnostics(virt_text, diagnostics),
-                        virt_text_pos = "overlay",
-                    })
-                end
-                return
-            end
-            apply_title(bufnr, ns_id, lnum, payload.title, "front")
-        else
-            apply_title(bufnr, ns_id, lnum, payload.title, opts.annotate.title.position)
-        end
+        apply_title(bufnr, ns_id, lnum, payload.title, opts.annotate.title.position)
     end
 
     if opts.annotate.group.highlight.enabled then

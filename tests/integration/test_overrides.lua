@@ -90,6 +90,18 @@ T["modeline: an invalid value falls through to the next weaker layer"] = functio
     H.expect_notified(nvim(), "must be one of")
 end
 
+T["modeline: legacy position replace maps to above with a warning"] = function()
+    local buf = set_lines_and_attach({ "# fix: annotate.title.position=replace" })
+    MiniTest.expect.equality(effective_position(buf), "above")
+    H.expect_notified(nvim(), "deprecated")
+end
+
+T["modeline: legacy position replace_front maps to front with a warning"] = function()
+    local buf = set_lines_and_attach({ "# fix: annotate.title.position=replace_front" })
+    MiniTest.expect.equality(effective_position(buf), "front")
+    H.expect_notified(nvim(), "deprecated")
+end
+
 -- Layer precedence -----------------------------------------------------
 
 T["layer precedence: modeline > vim.b > editorconfig > vim.g > setup"] = function()
@@ -113,17 +125,17 @@ T["layer precedence: modeline > vim.b > editorconfig > vim.g > setup"] = functio
 
     nvim().lua([[
         local buf = vim.api.nvim_get_current_buf()
-        vim.b[buf].fix_annotate_title_position = "replace"
+        vim.b[buf].fix_annotate_title_position = "above"
         require("fix.overrides").refresh(buf)
     ]])
-    MiniTest.expect.equality(effective_position(buf), "replace")
+    MiniTest.expect.equality(effective_position(buf), "above")
 
     nvim().lua([[
         local buf = vim.api.nvim_get_current_buf()
-        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# fix: annotate.title.position=replace_front" })
+        vim.api.nvim_buf_set_lines(buf, 0, 1, false, { "# fix: annotate.title.position=below" })
         require("fix.overrides").refresh(buf)
     ]])
-    MiniTest.expect.equality(effective_position(buf), "replace_front")
+    MiniTest.expect.equality(effective_position(buf), "below")
 end
 
 T["layer precedence: flat vim.b beats nested vim.b.fix"] = function()
@@ -683,82 +695,6 @@ T["overrides: a buffer's annotate.title.enabled override beats :FIX annotations 
     H.expect_virt_lines_count(nvim(), 1)
 end
 
--- title.position and the diagnostic virtual_text resolver ----------------
---
--- One client, one namespace, shared across buffers — and the namespace's
--- `virtual_text` option is global by construction.
-
-T["per-buffer: the diagnostic virtual_text resolver honours each buffer's own title.position"] = function()
-    nvim().lua([[vim.diagnostic.config({ virtual_text = { prefix = "@" } })]])
-
-    local buf_above = open_buffer({ BAD_CHECKSUM })
-    H.wait_validated(nvim())
-    local buf_replace = open_buffer({ "# fix: annotate.title.position=replace", BAD_CHECKSUM })
-    H.wait_validated(nvim())
-    local buf_front = open_buffer({ "# fix: annotate.title.position=replace_front", BAD_CHECKSUM })
-    H.wait_validated(nvim())
-
-    -- "above" (default): stock virtual text renders normally, unnarrowed.
-    local above_marks = H.stock_virt_text(nvim(), buf_above)
-    MiniTest.expect.equality(#above_marks, 1)
-    MiniTest.expect.equality(above_marks[1].text:find("@", 1, true) ~= nil, true)
-
-    -- "replace": the title carries the diagnostics; stock virtual text is off.
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf_replace), 0)
-
-    -- "replace_front": narrowed to the one revealed (cursor) line, the
-    -- configured prefix preserved rather than replaced.
-    nvim().cmd("buffer " .. buf_front)
-    nvim().lua([[vim.api.nvim_win_set_cursor(0, { 2, 0 })]]) -- reveal the message line (row 2 of 2)
-    H.wait_validated(nvim())
-    local front_marks = H.stock_virt_text(nvim(), buf_front)
-    MiniTest.expect.equality(#front_marks, 1)
-    MiniTest.expect.equality(front_marks[1].text:find("@", 1, true) ~= nil, true)
-
-    -- Re-check "above" last: the resolver decides fresh per call, not frozen
-    -- by whichever buffer last configured the (buffer-independent) namespace.
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf_above), 1)
-end
-
--- A presentation-only override (annotate.title.position) changes what the
--- resolver decides without touching a buffer line, and the resolver is only
--- consulted again on the next publish — so nothing re-renders on its own.
-
--- vim.b throughout, not the modeline: modeline outranks vim.b and would keep
--- winning over the live edit below, masking the transition under test.
-
-T["per-buffer: switching title.position away from replace re-renders the stock diagnostic"] = function()
-    nvim().lua([[vim.diagnostic.config({ virtual_text = { prefix = "@" } })]])
-    local buf = open_buffer({ BAD_CHECKSUM })
-    nvim().lua(("vim.b[%d].fix_annotate_title_position = 'replace'"):format(buf))
-    nvim().cmd("FIX overrides refresh")
-    H.wait_validated(nvim())
-    H.wait_annotated(nvim())
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf), 0) -- title carries it
-
-    nvim().lua(("vim.b[%d].fix_annotate_title_position = 'below'"):format(buf))
-    nvim().cmd("FIX overrides refresh")
-    H.wait_validated(nvim())
-    H.wait_annotated(nvim())
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf), 1) -- must now render inline
-end
-
-T["per-buffer: switching title.position to replace stops the doubled diagnostic"] = function()
-    nvim().lua([[vim.diagnostic.config({ virtual_text = { prefix = "@" } })]])
-    local buf = open_buffer({ BAD_CHECKSUM })
-    nvim().lua(("vim.b[%d].fix_annotate_title_position = 'below'"):format(buf))
-    nvim().cmd("FIX overrides refresh")
-    H.wait_validated(nvim())
-    H.wait_annotated(nvim())
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf), 1)
-
-    nvim().lua(("vim.b[%d].fix_annotate_title_position = 'replace'"):format(buf))
-    nvim().cmd("FIX overrides refresh")
-    H.wait_validated(nvim())
-    H.wait_annotated(nvim())
-    MiniTest.expect.equality(#H.stock_virt_text(nvim(), buf), 0) -- must not double up with the title
-end
-
 -- LSP gating ---------------------------------------------------------------
 
 --- Quickfix-only action count. When no client is attached at all,
@@ -1071,6 +1007,13 @@ local function reopen(path)
     nvim().cmd("bwipeout!")
     nvim().cmd("edit " .. path)
     H.wait_annotated(nvim(), 5000)
+end
+
+T["editorconfig: legacy position replace_front maps to front with a warning"] = function()
+    local buf = open_with_editorconfig({ "fix_annotate_title_position = replace_front" }, { HEARTBEAT })
+    MiniTest.expect.equality(effective_position(buf), "front")
+    H.expect_notified(nvim(), "deprecated")
+    H.expect_no_error_notifications(nvim())
 end
 
 T["editorconfig: a real .editorconfig file hides titles with no manual wiring"] = function()

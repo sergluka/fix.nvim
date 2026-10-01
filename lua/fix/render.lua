@@ -9,12 +9,11 @@ local M = {}
 local ns_id = vim.api.nvim_create_namespace("fix-protocol")
 
 ---@class FixRenderState
----@field rendered { key: string, gen: number, front: boolean, diagnostics: table? }[]  -- index = lnum + 1; sparse
+---@field rendered { key: string, gen: number }[]  -- index = lnum + 1; sparse
 ---@field keys table<string, boolean>              -- every cache key seen in this buffer
 ---@field generation number
 ---@field line_count number                        -- tracked manually: on_lines runs in a fast context
 ---@field warm FixScanWalk                         -- background cache warm-up
----@field revealed table<number, boolean>          -- cursor rows shown raw in replace_front mode
 ---@field debounce_timer? uv.uv_timer_t
 ---@field dirty? { first: number, last: number }   -- 0-based, last exclusive
 
@@ -22,25 +21,6 @@ local states = {} ---@type table<number, FixRenderState>
 
 local function opts()
     return require("fix").opts
-end
-
---- The title position that makes titles carry their line's diagnostics, or nil
---- when they do not. Only the concealed positions do: everywhere else the line
---- keeps its display width and `vim.diagnostic` renders them itself. The
---- validator reads this to know when to repaint and how to configure its
---- namespace, so the rule lives here alone.
----@param buf? number  effective(buf) when given and `title` omitted, else the global opts
----@param title? table  already-resolved `annotate.title`; skips re-resolving effective(buf)
----@return "replace"|"replace_front"|nil
-function M.diagnostics_in_title(buf, title)
-    title = title or (buf and Overrides.effective(buf) or opts()).annotate.title
-    if not title.enabled then
-        return nil
-    end
-    if title.position ~= "replace" and title.position ~= "replace_front" then
-        return nil
-    end
-    return title.position
 end
 
 ---@param buf number
@@ -52,73 +32,22 @@ local function render_lines(buf, srow, erow)
         return
     end
     local o = Overrides.effective(buf)
-    -- The stored table is replaced whenever the validator revalidates a line,
-    -- so its identity doubles as the "has this changed" marker in the slot.
-    local validate = M.diagnostics_in_title(buf, o.annotate.title) and require("fix.validate") or nil
     erow = math.min(erow, vim.api.nvim_buf_line_count(buf))
     for lnum = math.max(srow, 0), erow - 1 do
         local line = vim.api.nvim_buf_get_lines(buf, lnum, lnum + 1, false)[1] or ""
         local key = Document.key_for(buf, line)
         local slot = state.rendered[lnum + 1]
-        local front = state.revealed[lnum] == true
-        local diagnostics = validate and validate.diagnostics_for(buf, lnum) or nil
-        if
-            not (
-                slot
-                and slot.key == key
-                and slot.gen == state.generation
-                and slot.front == front
-                and slot.diagnostics == diagnostics
-            )
-        then
+        if not (slot and slot.key == key and slot.gen == state.generation) then
             local message, _, authoritative = Document.build_line(buf, lnum, line, key)
             local payload = message and Annotate.payload_for(message, key, o) or nil
-            Annotate.apply(o, buf, ns_id, lnum, line, payload, front, diagnostics)
+            Annotate.apply(o, buf, ns_id, lnum, payload)
             -- A non-authoritative result (tree didn't span the line) must not
             -- mark the slot rendered, or the line would stay bare forever.
             if authoritative then
-                state.rendered[lnum + 1] =
-                    { key = key, gen = state.generation, front = front, diagnostics = diagnostics }
+                state.rendered[lnum + 1] = { key = key, gen = state.generation }
                 state.keys[key] = true
             end
         end
-    end
-end
-
----@param buf number
-local function sync_revealed_lines(buf)
-    local state = states[buf]
-    if not state then
-        return
-    end
-
-    local o = Overrides.effective(buf)
-    local next_revealed = {}
-    if o.annotate.title.enabled and o.annotate.title.position == "replace_front" then
-        for _, win in ipairs(vim.fn.win_findbuf(buf)) do
-            if vim.api.nvim_win_is_valid(win) then
-                local row = vim.api.nvim_win_get_cursor(win)[1] - 1
-                next_revealed[row] = true
-            end
-        end
-    end
-
-    local changed = {}
-    for lnum in pairs(state.revealed) do
-        if not next_revealed[lnum] then
-            changed[#changed + 1] = lnum
-        end
-    end
-    for lnum in pairs(next_revealed) do
-        if not state.revealed[lnum] then
-            changed[#changed + 1] = lnum
-        end
-    end
-
-    state.revealed = next_revealed
-    for _, lnum in ipairs(changed) do
-        state.rendered[lnum + 1] = nil
-        render_lines(buf, lnum, lnum + 1)
     end
 end
 
@@ -126,14 +55,9 @@ function M.refresh_viewport(buf)
     if not states[buf] then
         return
     end
-    sync_revealed_lines(buf)
     for _, range in ipairs(Scan.viewport_ranges(buf)) do
         render_lines(buf, range[1], range[2])
     end
-end
-
-function M.refresh_cursor(buf)
-    sync_revealed_lines(buf)
 end
 
 ---@param buf number
@@ -264,7 +188,6 @@ function M.attach(buf)
         keys = {},
         generation = 0,
         line_count = vim.api.nvim_buf_line_count(buf),
-        revealed = {},
     }
     state.warm = warm_walk(buf, state)
     states[buf] = state
@@ -288,7 +211,6 @@ function M.attach(buf)
                 st.rendered = {}
                 st.keys = {}
                 st.dirty = nil
-                st.revealed = {}
                 st.warm:rewind(0)
                 vim.schedule(function()
                     if not vim.api.nvim_buf_is_valid(b) or states[b] ~= st then

@@ -25,7 +25,7 @@
 ---@field annotate.value.formatter? fun(field: Field): {text: string, highlight: string}
 ---@field annotate.title? table
 ---@field annotate.title.enabled? boolean
----@field annotate.title.position? string "above" | "below" | "front" | "replace" | "replace_front"
+---@field annotate.title.position? string "above" | "below" | "front"
 ---@field annotate.title.route? table
 ---@field annotate.title.route.enabled? boolean
 ---@field annotate.title.route.mode? string "direction" | "sender" | "pair"
@@ -83,6 +83,7 @@ local Document = require("fix.document")
 local Overrides = require("fix.overrides")
 local Persist = require("fix.persist")
 local Render = require("fix.render")
+local Spec = require("fix.overrides.spec")
 local TagFormatter = require("fix.formatters.tag")
 local TitleFormatter = require("fix.formatters.title")
 local TreeFieldFormatter = require("fix.formatters.tree.field")
@@ -118,11 +119,6 @@ local function handle_override_change(buf, diff)
     end
     if diff.suffix or diff.annotate then
         Render.rerender(buf)
-    end
-    if diff.annotate then
-        -- annotate.title.* changes what the diagnostic virtual_text resolver
-        -- would decide; nothing else re-renders it without a fresh publish.
-        Validate.refresh_virtual_text()
     end
     if diff.dictionary then
         refresh_tree()
@@ -327,11 +323,21 @@ local function validate_opts(opts, dictionaries)
 
     local route = opts.annotate.title.route
     local group_highlight = opts.annotate.group.highlight
-    vim.validate(
-        "annotate.title.position",
-        opts.annotate.title.position,
-        one_of({ "above", "below", "front", "replace", "replace_front" })
-    )
+    local title_position = Spec.SPEC_BY_PATH["annotate.title.position"]
+    -- TODO: remove the legacy mapping after 2027-01-01 (see Spec.legacy_value).
+    local replacement = Spec.legacy_value(title_position, opts.annotate.title.position)
+    if replacement then
+        vim.notify_once(
+            string.format(
+                "fix.nvim: annotate.title.position=%s is deprecated, use %s",
+                opts.annotate.title.position,
+                replacement
+            ),
+            vim.log.levels.WARN
+        )
+        opts.annotate.title.position = replacement
+    end
+    vim.validate("annotate.title.position", opts.annotate.title.position, one_of(title_position.values))
     vim.validate("annotate.title.route.mode", route.mode, one_of({ "direction", "sender", "pair" }))
     validate_palette("annotate.title.route.palette", route.palette)
     vim.validate("annotate.title.route.overrides", route.overrides, "table")
@@ -501,15 +507,6 @@ local function register_autocmds()
         callback = function(args)
             if vim.bo[args.buf].filetype == "fix" then
                 Render.refresh_viewport(args.buf)
-            end
-        end,
-    })
-
-    vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI", "WinEnter" }, {
-        group = group,
-        callback = function(args)
-            if vim.bo[args.buf].filetype == "fix" then
-                Render.refresh_cursor(args.buf)
             end
         end,
     })
