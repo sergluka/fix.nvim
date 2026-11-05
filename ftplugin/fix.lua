@@ -1,3 +1,7 @@
+if vim.g.fix_plugin_owner == "venue-reader.nvim" then
+    return
+end
+
 vim.bo.commentstring = "# %s"
 vim.bo.iskeyword = "33-60,62-123,125-255" -- all characters, except | and =
 

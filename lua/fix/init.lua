@@ -1,3 +1,9 @@
+if vim.g.fix_plugin_owner == "venue-reader.nvim" then
+    vim.notify_once("fix.nvim is disabled because venue-reader.nvim is already loaded.", vim.log.levels.WARN)
+    return { setup = function() end }
+end
+vim.g.fix_plugin_owner = "fix.nvim"
+
 -- TODO: competition?
 -- TODO: templates?
 -- TODO: highlight values based on Type?
