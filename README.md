@@ -1,5 +1,8 @@
 # fix.nvim: FIX Protocol viewer for Neovim
 
+> **fix.nvim is deprecated.** Switch to [venue-reader.nvim](https://github.com/sergluka/venue-reader.nvim),
+> whose language server delivered validation feedback **about 14 times faster on average**.
+
 fix.nvim turns raw [Financial Information eXchange (FIX)](https://www.fixtrading.org/standards/)
 logs into readable, navigable Neovim buffers. It decodes fields and messages,
 shows repeating-group structure, and provides focused tools for exploring and
